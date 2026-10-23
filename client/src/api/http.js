@@ -24,10 +24,15 @@ http.interceptors.request.use((requestConfig) => {
   return requestConfig;
 });
 
+// A 401 from these paths is an answer, not an expired session. Refreshing and
+// retrying a failed social sign-in would sign the user out over a stale Google
+// credential they just clicked.
 const NO_REFRESH_PATHS = [
   "/auth/login",
   "/auth/register",
   "/auth/refresh",
+  "/auth/google",
+  "/auth/facebook",
 ];
 
 const shouldSkipRefresh = (url = "") =>

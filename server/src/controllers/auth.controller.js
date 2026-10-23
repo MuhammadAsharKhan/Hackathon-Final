@@ -136,7 +136,11 @@ const verifyGoogleCredential = async (credential) => {
       idToken: credential,
       audience: config.googleClientId,
     });
-  } catch {
+  } catch (error) {
+    // The client only ever sees a generic 401. The reason stays in the server
+    // log, where "audience mismatch" tells an operator that GOOGLE_CLIENT_ID
+    // differs from the client ID the browser used.
+    console.warn(`Google credential rejected: ${error.message}`);
     throw new ApiError(401, "Google sign-in failed");
   }
 };
