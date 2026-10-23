@@ -1,18 +1,39 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
+import FormError from "@/components/ui/FormError";
 import Input from "@/components/ui/Input";
+import Select from "@/components/ui/Select";
+import GoogleSection from "@/components/auth/GoogleSection";
 import { useAuth } from "@/hooks/useAuth";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { getErrorMessage, getFieldErrors } from "@/lib/errors";
+import {
+  EMAIL_PATTERN,
+  GENDER_CHOICES,
+  PASSWORD_HINT,
+  validateAge,
+  validateName,
+  validatePassword,
+} from "@/lib/validation";
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMPTY_FORM = {
+  name: "",
+  email: "",
+  age: "",
+  gender: "",
+  password: "",
+};
 
 export default function Register() {
   const { register } = useAuth();
+  useDocumentTitle("Create account");
   const navigate = useNavigate();
-  const [values, setValues] = useState({ name: "", email: "", password: "" });
+  const location = useLocation();
+  const from = location.state?.from?.pathname || "/dashboard";
+  const [values, setValues] = useState(EMPTY_FORM);
   const [fieldErrors, setFieldErrors] = useState({});
   const [formError, setFormError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -31,18 +52,16 @@ export default function Register() {
     const email = values.email.trim().toLowerCase();
     const nextErrors = {};
 
-    if (name.length < 2) nextErrors.name = "Name must be at least 2 characters";
-    else if (name.length > 60)
-      nextErrors.name = "Name must be at most 60 characters";
+    const nameError = validateName(name);
+    if (nameError) nextErrors.name = nameError;
 
     if (!EMAIL_PATTERN.test(email)) nextErrors.email = "Enter a valid email";
 
-    if (values.password.length < 8)
-      nextErrors.password = "Password must be at least 8 characters";
-    else if (values.password.length > 72)
-      nextErrors.password = "Password must be at most 72 characters";
-    else if (!/[A-Za-z]/.test(values.password) || !/[0-9]/.test(values.password))
-      nextErrors.password = "Use at least one letter and one number";
+    const ageError = validateAge(values.age);
+    if (ageError) nextErrors.age = ageError;
+
+    const passwordError = validatePassword(values.password);
+    if (passwordError) nextErrors.password = passwordError;
 
     setFieldErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
@@ -50,9 +69,17 @@ export default function Register() {
     setSubmitting(true);
 
     try {
-      await register({ name, email, password: values.password });
+      const payload = {
+        name,
+        email,
+        password: values.password,
+        age: Number(values.age),
+      };
+      if (values.gender) payload.gender = values.gender;
+
+      await register(payload);
       toast.success("Account created");
-      navigate("/dashboard", { replace: true });
+      navigate(from, { replace: true });
     } catch (error) {
       setFieldErrors(getFieldErrors(error));
       setFormError(getErrorMessage(error));
@@ -85,28 +112,48 @@ export default function Register() {
           error={fieldErrors.email}
         />
         <Input
+          label="Age"
+          type="number"
+          inputMode="numeric"
+          min={1}
+          max={150}
+          step={1}
+          required
+          value={values.age}
+          onChange={update("age")}
+          error={fieldErrors.age}
+        />
+        <Select
+          label="Gender"
+          value={values.gender}
+          onChange={update("gender")}
+          error={fieldErrors.gender}
+        >
+          <option value="">Prefer not to say (optional)</option>
+          {GENDER_CHOICES.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </Select>
+        <Input
           label="Password"
           type="password"
           autoComplete="new-password"
           value={values.password}
           onChange={update("password")}
           error={fieldErrors.password}
-          hint="8 to 72 characters, with a letter and a number."
+          hint={PASSWORD_HINT}
         />
 
-        {formError ? (
-          <p
-            role="alert"
-            className="rounded-lg border border-danger px-3 py-2 text-sm text-danger"
-          >
-            {formError}
-          </p>
-        ) : null}
+        <FormError bordered>{formError}</FormError>
 
         <Button type="submit" className="w-full" loading={submitting}>
           Create account
         </Button>
       </form>
+
+      <GoogleSection />
 
       <p className="mt-5 text-sm text-muted-foreground">
         Already registered?{" "}

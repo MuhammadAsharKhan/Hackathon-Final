@@ -25,6 +25,7 @@ export default function Pagination({
         <Button
           variant="secondary"
           size="sm"
+          className="h-10 sm:h-8"
           onClick={() => onChange(page - 1)}
           disabled={disabled || page <= 1}
         >
@@ -36,6 +37,7 @@ export default function Pagination({
         <Button
           variant="secondary"
           size="sm"
+          className="h-10 sm:h-8"
           onClick={() => onChange(page + 1)}
           disabled={disabled || page >= pages}
         >

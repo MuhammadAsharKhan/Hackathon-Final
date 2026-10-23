@@ -1,8 +1,10 @@
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { config } from "../config/env.js";
+import User from "../models/User.js";
 
 export const REFRESH_COOKIE = "rt";
+export const REFRESH_GRACE_MS = 10 * 1000;
 
 const MAX_SESSIONS = 5;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -48,17 +50,30 @@ export const createSession = async (user) => {
   const { token: refreshToken } = signRefreshToken(user.id);
   const now = new Date();
 
-  const active = (user.refreshTokens || []).filter(
-    (entry) => entry.expiresAt > now
+  await User.updateOne(
+    { _id: user.id },
+    { $pull: { refreshTokens: { expiresAt: { $lte: now } } } }
   );
-  active.push({
-    tokenHash: hashToken(refreshToken),
-    expiresAt: new Date(now.getTime() + config.refreshTokenTtlDays * DAY_MS),
-    createdAt: now,
-  });
 
-  user.refreshTokens = active.slice(-MAX_SESSIONS);
-  await user.save();
+  await User.updateOne(
+    { _id: user.id },
+    {
+      $push: {
+        refreshTokens: {
+          $each: [
+            {
+              tokenHash: hashToken(refreshToken),
+              expiresAt: new Date(
+                now.getTime() + config.refreshTokenTtlDays * DAY_MS
+              ),
+              createdAt: now,
+            },
+          ],
+          $slice: -MAX_SESSIONS,
+        },
+      },
+    }
+  );
 
   return { accessToken, refreshToken };
 };

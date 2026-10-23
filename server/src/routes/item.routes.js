@@ -3,6 +3,7 @@ import {
   createItem,
   deleteItem,
   getItem,
+  getItemByUid,
   listItems,
   updateItem,
 } from "../controllers/item.controller.js";
@@ -11,6 +12,7 @@ import { validate } from "../middleware/validate.js";
 import {
   createItemSchema,
   itemIdSchema,
+  itemUidParamSchema,
   listItemsQuerySchema,
   updateItemSchema,
 } from "../validators/item.validators.js";
@@ -23,6 +25,12 @@ router
   .route("/")
   .get(validate(listItemsQuerySchema, "query"), listItems)
   .post(validate(createItemSchema), createItem);
+
+router.get(
+  "/uid/:uid",
+  validate(itemUidParamSchema, "params"),
+  getItemByUid
+);
 
 router
   .route("/:id")

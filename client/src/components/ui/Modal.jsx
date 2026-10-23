@@ -14,6 +14,7 @@ export default function Modal({
   children,
   footer,
   className,
+  dismissible = true,
 }) {
   const panelRef = useRef(null);
   const onCloseRef = useRef(onClose);
@@ -28,7 +29,14 @@ export default function Modal({
     const panel = panelRef.current;
     const previouslyFocused = document.activeElement;
     const previousOverflow = document.body.style.overflow;
+    const previousPaddingRight = document.body.style.paddingRight;
+    const scrollbarWidth =
+      window.innerWidth - document.documentElement.clientWidth;
+
     document.body.style.overflow = "hidden";
+    if (scrollbarWidth > 0) {
+      document.body.style.paddingRight = `${scrollbarWidth}px`;
+    }
 
     const getFocusable = () =>
       Array.from(panel?.querySelectorAll(FOCUSABLE) || []).filter(
@@ -43,7 +51,7 @@ export default function Modal({
     }
 
     const handleKeyDown = (event) => {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && dismissible) {
         event.preventDefault();
         onCloseRef.current?.();
         return;
@@ -71,9 +79,10 @@ export default function Modal({
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = previousOverflow;
+      document.body.style.paddingRight = previousPaddingRight;
       previouslyFocused?.focus?.();
     };
-  }, [open]);
+  }, [open, dismissible]);
 
   if (!open) return null;
 
@@ -81,7 +90,9 @@ export default function Modal({
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4">
       <div
         className="animate-overlay-in overlay-backdrop absolute inset-0"
-        onClick={() => onCloseRef.current?.()}
+        onClick={() => {
+          if (dismissible) onCloseRef.current?.();
+        }}
         aria-hidden="true"
       />
       <div
@@ -91,11 +102,11 @@ export default function Modal({
         aria-labelledby={title ? "modal-title" : undefined}
         tabIndex={-1}
         className={cn(
-          "animate-panel-in relative w-full max-w-lg rounded-t-xl border border-border bg-background shadow-sm sm:rounded-xl",
+          "animate-panel-in relative flex max-h-[calc(100dvh-1rem)] w-full max-w-lg flex-col rounded-t-xl border border-border bg-background shadow-sm sm:max-h-[calc(100dvh-2rem)] sm:rounded-xl",
           className
         )}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-border px-6 py-4">
+        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-border px-6 py-4">
           <div className="space-y-1">
             {title ? (
               <h2 id="modal-title" className="text-base font-semibold">
@@ -106,20 +117,22 @@ export default function Modal({
               <p className="text-sm text-muted-foreground">{description}</p>
             ) : null}
           </div>
-          <button
-            type="button"
-            onClick={() => onCloseRef.current?.()}
-            aria-label="Close dialog"
-            className="-mr-1 -mt-1 rounded-md p-1.5 text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground"
-          >
-            <X className="h-4 w-4" aria-hidden="true" />
-          </button>
+          {dismissible ? (
+            <button
+              type="button"
+              onClick={() => onCloseRef.current?.()}
+              aria-label="Close dialog"
+              className="-mr-1 -mt-1 rounded-md p-1.5 text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+          ) : null}
         </div>
 
-        <div className="px-6 py-5">{children}</div>
+        <div className="flex-1 overflow-y-auto px-6 py-5">{children}</div>
 
         {footer ? (
-          <div className="flex justify-end gap-2 border-t border-border px-6 py-4">
+          <div className="flex shrink-0 justify-end gap-2 border-t border-border px-6 py-4">
             {footer}
           </div>
         ) : null}

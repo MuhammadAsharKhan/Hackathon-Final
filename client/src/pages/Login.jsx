@@ -3,18 +3,24 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
+import FormError from "@/components/ui/FormError";
 import Input from "@/components/ui/Input";
+import ForgotPasswordModal from "@/components/auth/ForgotPasswordModal";
+import GoogleSection from "@/components/auth/GoogleSection";
 import { useAuth } from "@/hooks/useAuth";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { getErrorMessage, getFieldErrors } from "@/lib/errors";
 
 export default function Login() {
   const { login } = useAuth();
+  useDocumentTitle("Sign in");
   const navigate = useNavigate();
   const location = useLocation();
   const [values, setValues] = useState({ email: "", password: "" });
   const [fieldErrors, setFieldErrors] = useState({});
   const [formError, setFormError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [forgotOpen, setForgotOpen] = useState(false);
 
   const from = location.state?.from?.pathname || "/dashboard";
 
@@ -73,19 +79,25 @@ export default function Login() {
           error={fieldErrors.password}
         />
 
-        {formError ? (
-          <p
-            role="alert"
-            className="rounded-lg border border-danger px-3 py-2 text-sm text-danger"
+        <div className="flex justify-end">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-auto px-0 text-xs text-muted-foreground hover:bg-transparent hover:text-foreground"
+            onClick={() => setForgotOpen(true)}
           >
-            {formError}
-          </p>
-        ) : null}
+            Forgot password?
+          </Button>
+        </div>
+
+        <FormError bordered>{formError}</FormError>
 
         <Button type="submit" className="w-full" loading={submitting}>
           Sign in
         </Button>
       </form>
+
+      <GoogleSection />
 
       <p className="mt-5 text-sm text-muted-foreground">
         No account yet?{" "}
@@ -96,6 +108,12 @@ export default function Login() {
           Create one
         </Link>
       </p>
+
+      <ForgotPasswordModal
+        open={forgotOpen}
+        onClose={() => setForgotOpen(false)}
+        initialEmail={values.email.trim()}
+      />
     </Card>
   );
 }

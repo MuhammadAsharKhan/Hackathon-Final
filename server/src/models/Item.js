@@ -1,7 +1,13 @@
 import mongoose from "mongoose";
+import { createUid } from "../utils/uid.js";
 
 const itemSchema = new mongoose.Schema(
   {
+    uid: {
+      type: String,
+      unique: true,
+      immutable: true,
+    },
     owner: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -31,6 +37,11 @@ const itemSchema = new mongoose.Schema(
 );
 
 itemSchema.index({ owner: 1, createdAt: -1 });
+
+itemSchema.pre("validate", async function assignUid() {
+  if (!this.isNew || this.uid) return;
+  this.uid = await createUid(this.constructor);
+});
 
 itemSchema.set("toJSON", {
   transform: (_doc, ret) => {

@@ -44,6 +44,17 @@ export const getItem = asyncHandler(async (req, res) => {
   res.json({ success: true, data: { item } });
 });
 
+export const getItemByUid = asyncHandler(async (req, res) => {
+  const item = await Item.findOne({
+    uid: req.params.uid,
+    owner: req.user.id,
+  });
+
+  if (!item) throw new ApiError(404, "Item not found");
+
+  res.json({ success: true, data: { item } });
+});
+
 export const updateItem = asyncHandler(async (req, res) => {
   const item = await Item.findOneAndUpdate(
     { _id: req.params.id, owner: req.user.id },

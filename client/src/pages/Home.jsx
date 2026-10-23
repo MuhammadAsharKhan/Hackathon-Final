@@ -1,6 +1,8 @@
 import { Link } from "react-router-dom";
 import { KeyRound, ListChecks, ShieldCheck } from "lucide-react";
+import Button from "@/components/ui/Button";
 import { useAuth } from "@/hooks/useAuth";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const features = [
   {
@@ -23,14 +25,9 @@ const features = [
   },
 ];
 
-const primaryLink =
-  "inline-flex h-10 items-center justify-center rounded-lg border border-primary bg-primary px-4 text-sm font-medium text-primary-foreground transition-opacity duration-150 hover:opacity-90";
-
-const secondaryLink =
-  "inline-flex h-10 items-center justify-center rounded-lg border border-border bg-background px-4 text-sm font-medium text-foreground transition-colors duration-150 hover:bg-surface";
-
 export default function Home() {
   const { user } = useAuth();
+  useDocumentTitle(null);
 
   return (
     <div className="space-y-14">
@@ -45,27 +42,27 @@ export default function Home() {
         <div className="mt-8 flex flex-wrap items-center gap-3">
           {user ? (
             <>
-              <Link to="/dashboard" className={primaryLink}>
+              <Button as={Link} to="/dashboard">
                 Open dashboard
-              </Link>
-              <Link to="/profile" className={secondaryLink}>
+              </Button>
+              <Button as={Link} to="/profile" variant="secondary">
                 View profile
-              </Link>
+              </Button>
             </>
           ) : (
             <>
-              <Link to="/register" className={primaryLink}>
+              <Button as={Link} to="/register">
                 Create account
-              </Link>
-              <Link to="/login" className={secondaryLink}>
+              </Button>
+              <Button as={Link} to="/login" variant="secondary">
                 Sign in
-              </Link>
+              </Button>
             </>
           )}
         </div>
       </section>
 
-      <section aria-label="What is included">
+      <section id="features" aria-label="What is included">
         <div className="grid gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-3">
           {features.map(({ icon: Icon, title, description }) => (
             <div key={title} className="bg-background p-6">

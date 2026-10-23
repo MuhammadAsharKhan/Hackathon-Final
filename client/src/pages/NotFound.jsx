@@ -1,6 +1,10 @@
 import { Link } from "react-router-dom";
+import Button from "@/components/ui/Button";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 export default function NotFound() {
+  useDocumentTitle("Page not found");
+
   return (
     <div className="max-w-lg space-y-4 py-16">
       <p className="text-sm font-medium text-muted-foreground">404</p>
@@ -10,12 +14,9 @@ export default function NotFound() {
       <p className="text-sm text-muted-foreground">
         The link may be outdated, or the page moved.
       </p>
-      <Link
-        to="/"
-        className="inline-flex h-10 items-center justify-center rounded-lg border border-border bg-background px-4 text-sm font-medium text-foreground transition-colors duration-150 hover:bg-surface"
-      >
+      <Button as={Link} to="/" variant="secondary">
         Back home
-      </Link>
+      </Button>
     </div>
   );
 }

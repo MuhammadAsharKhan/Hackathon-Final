@@ -26,8 +26,13 @@ export const protect = asyncHandler(async (req, res, next) => {
 
   req.user = {
     id: user.id,
+    uid: user.uid,
     name: user.name,
     email: user.email,
+    age: user.age ?? null,
+    gender: user.gender ?? null,
+    avatarUrl: user.avatarUrl ?? "",
+    hasPassword: user.hasPassword,
     role: user.role,
   };
 

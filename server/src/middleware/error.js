@@ -1,5 +1,4 @@
 import { ZodError } from "zod";
-import { config } from "../config/env.js";
 import ApiError from "../utils/ApiError.js";
 
 const toResponse = (err) => {
@@ -45,6 +44,13 @@ const toResponse = (err) => {
     return { statusCode: 401, message: "Invalid or expired token" };
   }
 
+  if (err.name === "MulterError") {
+    if (err.code === "LIMIT_FILE_SIZE") {
+      return { statusCode: 413, message: "Image must be 2 MB or smaller" };
+    }
+    return { statusCode: 400, message: "Upload failed" };
+  }
+
   if (err.type === "entity.parse.failed") {
     return { statusCode: 400, message: "Invalid JSON payload" };
   }
@@ -65,7 +71,6 @@ export const errorHandler = (err, req, res, next) => {
 
   const body = { success: false, message };
   if (errors && errors.length > 0) body.errors = errors;
-  if (!config.isProduction && err.stack) body.stack = err.stack;
 
   res.status(statusCode).json(body);
 };

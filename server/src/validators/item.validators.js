@@ -13,8 +13,13 @@ const titleSchema = z
 
 const descriptionSchema = z
   .string()
-  .trim()
-  .max(2000, "Description must be at most 2000 characters");
+  .refine((value) => value === "" || value.trim().length > 0, {
+    message: "Description cannot contain only spaces",
+  })
+  .transform((value) => value.trim())
+  .refine((value) => value.length <= 2000, {
+    message: "Description must be at most 2000 characters",
+  });
 
 export const createItemSchema = z.object({
   title: titleSchema,
@@ -44,4 +49,8 @@ export const listItemsQuerySchema = z.object({
 
 export const itemIdSchema = z.object({
   id: z.string().regex(/^[0-9a-fA-F]{24}$/, "Invalid id"),
+});
+
+export const itemUidParamSchema = z.object({
+  uid: z.string().regex(/^\d{9}$/, "Invalid uid"),
 });

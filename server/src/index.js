@@ -3,6 +3,8 @@ import app from "./app.js";
 import { config } from "./config/env.js";
 import { connectDB } from "./config/db.js";
 import { startKeepAlive } from "./utils/keepAlive.js";
+import { ensureUids } from "./utils/ensureUids.js";
+import { setupAi } from "./services/aiSetup.js";
 
 process.on("unhandledRejection", (reason) => {
   console.error("Unhandled rejection:", reason);
@@ -11,14 +13,19 @@ process.on("unhandledRejection", (reason) => {
 
 const start = async () => {
   await connectDB();
+  await ensureUids();
+  await setupAi();
 
   const server = app.listen(config.port, () => {
     console.log(`Server listening on port ${config.port} (${config.nodeEnv})`);
   });
 
   const stopKeepAlive = startKeepAlive();
+  let shuttingDown = false;
 
   const shutdown = (signal) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     console.log(`${signal} received, shutting down`);
     stopKeepAlive();
 

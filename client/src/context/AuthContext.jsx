@@ -55,6 +55,13 @@ export function AuthProvider({ children }) {
     return session.user;
   }, []);
 
+  const loginWithGoogle = useCallback(async (credential) => {
+    const session = await authApi.signInWithGoogle(credential);
+    setToken(session.accessToken);
+    setUser(session.user);
+    return session.user;
+  }, []);
+
   const logout = useCallback(async () => {
     await authApi.logout().catch(() => {});
     clearToken();
@@ -66,8 +73,8 @@ export function AuthProvider({ children }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, loading, login, register, logout, updateUser }),
-    [user, loading, login, register, logout, updateUser]
+    () => ({ user, loading, login, register, loginWithGoogle, logout, updateUser }),
+    [user, loading, login, register, loginWithGoogle, logout, updateUser]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

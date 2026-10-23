@@ -32,6 +32,23 @@ const envSchema = z.object({
     emptyToUndefined,
     z.string().min(8).max(72).optional()
   ),
+  JWT_RESET_SECRET: z
+    .string()
+    .min(32, "JWT_RESET_SECRET must be at least 32 characters"),
+  GOOGLE_CLIENT_ID: z.preprocess(emptyToUndefined, z.string().optional()),
+  CLOUDINARY_CLOUD_NAME: z.preprocess(emptyToUndefined, z.string().optional()),
+  CLOUDINARY_API_KEY: z.preprocess(emptyToUndefined, z.string().optional()),
+  CLOUDINARY_API_SECRET: z.preprocess(emptyToUndefined, z.string().optional()),
+  RESEND_API_KEY: z.preprocess(emptyToUndefined, z.string().optional()),
+  MAIL_FROM: z.string().default("onboarding@resend.dev"),
+  AI_KEY_SECRET: z
+    .string()
+    .regex(/^[0-9a-fA-F]{64}$/, "AI_KEY_SECRET must be 64 hex characters"),
+  AI_COOLDOWN_SECONDS: z.coerce.number().int().positive().default(60),
+  GEMINI_API_KEY_1: z.preprocess(emptyToUndefined, z.string().optional()),
+  GEMINI_API_KEY_2: z.preprocess(emptyToUndefined, z.string().optional()),
+  GROK_API_KEY_1: z.preprocess(emptyToUndefined, z.string().optional()),
+  GROK_API_KEY_2: z.preprocess(emptyToUndefined, z.string().optional()),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -64,4 +81,15 @@ export const config = Object.freeze({
   keepAliveMinutes: env.KEEP_ALIVE_MINUTES,
   adminEmail: env.ADMIN_EMAIL ?? "",
   adminPassword: env.ADMIN_PASSWORD ?? "",
+  jwtResetSecret: env.JWT_RESET_SECRET,
+  googleClientId: env.GOOGLE_CLIENT_ID ?? "",
+  cloudinaryCloudName: env.CLOUDINARY_CLOUD_NAME ?? "",
+  cloudinaryApiKey: env.CLOUDINARY_API_KEY ?? "",
+  cloudinaryApiSecret: env.CLOUDINARY_API_SECRET ?? "",
+  resendApiKey: env.RESEND_API_KEY ?? "",
+  mailFrom: env.MAIL_FROM,
+  aiKeySecret: env.AI_KEY_SECRET,
+  aiCooldownSeconds: env.AI_COOLDOWN_SECONDS,
+  geminiApiKeys: [env.GEMINI_API_KEY_1, env.GEMINI_API_KEY_2].filter(Boolean),
+  grokApiKeys: [env.GROK_API_KEY_1, env.GROK_API_KEY_2].filter(Boolean),
 });

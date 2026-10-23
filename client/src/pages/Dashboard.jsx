@@ -1,6 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
-  AlertCircle,
   Inbox,
   Pencil,
   Plus,
@@ -11,7 +10,10 @@ import toast from "react-hot-toast";
 import Badge, { STATUS_LABELS } from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import CopyButton from "@/components/ui/CopyButton";
 import EmptyState from "@/components/ui/EmptyState";
+import ErrorState from "@/components/ui/ErrorState";
+import FormError from "@/components/ui/FormError";
 import Input from "@/components/ui/Input";
 import Modal from "@/components/ui/Modal";
 import PageHeader from "@/components/ui/PageHeader";
@@ -20,19 +22,16 @@ import Select from "@/components/ui/Select";
 import Textarea from "@/components/ui/Textarea";
 import { createItem, deleteItem, listItems, updateItem } from "@/api/items.api";
 import { useDebounce } from "@/hooks/useDebounce";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { getErrorMessage, getFieldErrors } from "@/lib/errors";
+import { formatDate } from "@/lib/format";
 
 const PAGE_SIZE = 10;
 const EMPTY_FORM = { title: "", description: "", status: "todo" };
 
-const formatDate = (value) =>
-  new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(new Date(value));
-
 export default function Dashboard() {
+  useDocumentTitle("Dashboard");
+
   const [items, setItems] = useState([]);
   const [pagination, setPagination] = useState({
     page: 1,
@@ -47,6 +46,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const debouncedSearch = useDebounce(search, 400);
+  const listRef = useRef(null);
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -96,11 +96,15 @@ export default function Dashboard() {
     setFormErrors((previous) => ({ ...previous, [field]: undefined }));
   };
 
-  const openCreate = () => {
+  const resetForm = () => {
     setEditing(null);
     setForm(EMPTY_FORM);
     setFormErrors({});
     setFormError("");
+  };
+
+  const openCreate = () => {
+    resetForm();
     setFormOpen(true);
   };
 
@@ -119,6 +123,17 @@ export default function Dashboard() {
   const closeForm = () => {
     if (saving) return;
     setFormOpen(false);
+    resetForm();
+  };
+
+  const handlePageChange = (nextPage) => {
+    setPage(nextPage);
+    listRef.current?.scrollIntoView({
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "auto"
+        : "smooth",
+      block: "start",
+    });
   };
 
   const handleSubmit = async (event) => {
@@ -154,6 +169,7 @@ export default function Dashboard() {
       }
 
       setFormOpen(false);
+      resetForm();
       setRefreshKey((key) => key + 1);
     } catch (requestError) {
       setFormErrors(getFieldErrors(requestError));
@@ -210,6 +226,7 @@ export default function Dashboard() {
             aria-hidden="true"
           />
           <Input
+            type="search"
             aria-label="Search items by title"
             placeholder="Search by title"
             value={search}
@@ -238,115 +255,109 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {loading ? (
-        <div className="space-y-3" aria-hidden="true">
-          {Array.from({ length: 4 }).map((_, index) => (
-            <div
-              key={index}
-              className="rounded-xl border border-border p-5"
-            >
-              <div className="skeleton h-4 w-1/3" />
-              <div className="skeleton mt-3 h-3 w-2/3" />
-              <div className="skeleton mt-2 h-3 w-24" />
-            </div>
-          ))}
-        </div>
-      ) : error ? (
-        <div className="rounded-xl border border-border p-6">
-          <div className="flex items-start gap-3">
-            <AlertCircle
-              className="mt-0.5 h-4 w-4 text-danger"
-              aria-hidden="true"
-            />
-            <div>
-              <p className="text-sm font-medium">Items did not load</p>
-              <p className="mt-1 text-sm text-muted-foreground">{error}</p>
-              <Button
-                variant="secondary"
-                size="sm"
-                className="mt-3"
-                onClick={() => setRefreshKey((key) => key + 1)}
+      <div ref={listRef} className="scroll-mt-20">
+        {loading ? (
+          <div className="space-y-3" aria-hidden="true">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div
+                key={index}
+                className="rounded-xl border border-border p-5"
               >
-                Try again
-              </Button>
-            </div>
+                <div className="skeleton h-4 w-1/3" />
+                <div className="skeleton mt-3 h-3 w-2/3" />
+                <div className="skeleton mt-2 h-3 w-24" />
+              </div>
+            ))}
           </div>
-        </div>
-      ) : items.length === 0 ? (
-        <EmptyState
-          icon={Inbox}
-          title={filtersActive ? "No matching items" : "No items yet"}
-          description={
-            filtersActive
-              ? "Try a different search or status."
-              : "Create the first item to see the flow end to end."
-          }
-          action={
-            filtersActive ? (
-              <Button variant="secondary" onClick={clearFilters}>
-                Clear filters
-              </Button>
-            ) : (
-              <Button onClick={openCreate}>
-                <Plus className="h-4 w-4" aria-hidden="true" />
-                New item
-              </Button>
-            )
-          }
-        />
-      ) : (
-        <div className="overflow-hidden rounded-xl border border-border">
-          {items.map((item) => (
-            <div
-              key={item.id}
-              className="flex flex-col gap-3 border-b border-border p-5 last:border-b-0 sm:flex-row sm:items-start sm:justify-between"
-            >
-              <div className="min-w-0 space-y-1.5">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="truncate text-sm font-medium">{item.title}</h2>
-                  <Badge status={item.status} />
-                </div>
-                {item.description ? (
-                  <p className="line-clamp-2 text-sm text-muted-foreground">
-                    {item.description}
+        ) : error ? (
+          <ErrorState
+            title="Items did not load"
+            message={error}
+            onRetry={() => setRefreshKey((key) => key + 1)}
+          />
+        ) : items.length === 0 ? (
+          <EmptyState
+            icon={Inbox}
+            title={filtersActive ? "No matching items" : "No items yet"}
+            description={
+              filtersActive
+                ? "Try a different search or status."
+                : "Create the first item to see the flow end to end."
+            }
+            action={
+              filtersActive ? (
+                <Button variant="secondary" onClick={clearFilters}>
+                  Clear filters
+                </Button>
+              ) : (
+                <Button onClick={openCreate}>
+                  <Plus className="h-4 w-4" aria-hidden="true" />
+                  New item
+                </Button>
+              )
+            }
+          />
+        ) : (
+          <div className="overflow-hidden rounded-xl border border-border">
+            {items.map((item) => (
+              <div
+                key={item.id}
+                className="flex flex-col gap-3 border-b border-border p-5 last:border-b-0 sm:flex-row sm:items-start sm:justify-between"
+              >
+                <div className="min-w-0 space-y-1.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="truncate text-sm font-medium">{item.title}</h2>
+                    <Badge status={item.status} />
+                  </div>
+                  {item.description ? (
+                    <p className="line-clamp-2 text-sm text-muted-foreground">
+                      {item.description}
+                    </p>
+                  ) : null}
+                  <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span>Updated {formatDate(item.updatedAt)}</span>
+                    <span aria-hidden="true">/</span>
+                    <span className="tabular-nums">UID {item.uid}</span>
+                    <CopyButton
+                      value={item.uid}
+                      label={`Copy uid for ${item.title}`}
+                      className="h-6 w-6"
+                    />
                   </p>
-                ) : null}
-                <p className="text-xs text-muted-foreground">
-                  Updated {formatDate(item.updatedAt)}
-                </p>
-              </div>
+                </div>
 
-              <div className="flex shrink-0 items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => openEdit(item)}
-                  aria-label={`Edit ${item.title}`}
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  <Pencil className="h-4 w-4" aria-hidden="true" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setDeleting(item)}
-                  aria-label={`Delete ${item.title}`}
-                  className="text-muted-foreground hover:text-danger"
-                >
-                  <Trash2 className="h-4 w-4" aria-hidden="true" />
-                </Button>
+                <div className="flex shrink-0 items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => openEdit(item)}
+                    aria-label={`Edit ${item.title}`}
+                    className="h-10 w-10 px-0 text-muted-foreground hover:text-foreground sm:h-8 sm:w-8"
+                  >
+                    <Pencil className="h-4 w-4" aria-hidden="true" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setDeleting(item)}
+                    aria-label={`Delete ${item.title}`}
+                    className="h-10 w-10 px-0 text-muted-foreground hover:text-danger sm:h-8 sm:w-8"
+                  >
+                    <Trash2 className="h-4 w-4" aria-hidden="true" />
+                  </Button>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </div>
 
       {!loading && !error ? (
         <Pagination
           page={pagination.page}
           pages={pagination.pages}
           total={pagination.total}
-          onChange={setPage}
+          onChange={handlePageChange}
         />
       ) : null}
 
@@ -407,11 +418,7 @@ export default function Dashboard() {
             <option value="done">{STATUS_LABELS.done}</option>
           </Select>
 
-          {formError ? (
-            <p role="alert" className="text-sm text-danger">
-              {formError}
-            </p>
-          ) : null}
+          <FormError>{formError}</FormError>
         </form>
       </Modal>
 

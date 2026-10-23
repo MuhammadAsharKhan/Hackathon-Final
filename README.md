@@ -2,7 +2,7 @@
 
 A small, production-shaped starter for hackathon projects.
 
-- `server/` is an Express 4 + Mongoose API with JWT access tokens, rotating refresh tokens in an httpOnly cookie, Zod validation, rate limits and an admin role.
+- `server/` is an Express 4 + Mongoose API with JWT access tokens, rotating refresh tokens in an httpOnly cookie, Zod validation, rate limits and an admin role. It also has nine digit public uids, Google sign-in, Cloudinary avatars, OTP password reset and an optional AI Buddy with provider key rotation.
 - `client/` is a Vite + React 18 single-page app with a complete auth flow and one working CRUD module (items) that serves as the template for new modules.
 
 The client never stores tokens in web storage. The access token lives in memory only; the refresh token lives in an httpOnly cookie scoped to `/api/auth`.
@@ -25,7 +25,7 @@ Create `server/.env` from the template and fill in the values:
 cp server/.env.example server/.env
 ```
 
-At minimum set `MONGODB_URI`, `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET`. Each secret must be at least 32 characters.
+At minimum set `MONGODB_URI`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `JWT_RESET_SECRET` and `AI_KEY_SECRET`. Each secret in the first group must be at least 32 characters; `AI_KEY_SECRET` must be 64 hex characters.
 
 Generate two secrets with:
 
@@ -70,12 +70,24 @@ If your shell already exports `PORT`, the server may pick it up. Prefix the comm
 | `KEEP_ALIVE_MINUTES` | No | `4` | Interval for the internal keep-alive request when `SELF_URL` is set in production. |
 | `ADMIN_EMAIL` | No | empty | Email for the seeded admin. The seed script is idempotent and promotes an existing user. |
 | `ADMIN_PASSWORD` | No | empty | Password for the seeded admin, 8 to 72 characters. |
+| `JWT_RESET_SECRET` | Yes | none | Secret for reset code hashes and password reset tokens, minimum 32 characters. |
+| `GOOGLE_CLIENT_ID` | No | empty | Google OAuth client ID. Without it `POST /api/auth/google` answers 503. |
+| `CLOUDINARY_CLOUD_NAME` | No | empty | Cloudinary cloud name for avatars. The three Cloudinary values are needed together. |
+| `CLOUDINARY_API_KEY` | No | empty | Cloudinary API key. |
+| `CLOUDINARY_API_SECRET` | No | empty | Cloudinary API secret. |
+| `RESEND_API_KEY` | No | empty | Resend API key for reset emails. Without it in development the code is printed to the server console. |
+| `MAIL_FROM` | No | `onboarding@resend.dev` | Sender address for reset emails. |
+| `AI_KEY_SECRET` | Yes | none | 64 hex characters. Encrypts stored AI provider keys. |
+| `AI_COOLDOWN_SECONDS` | No | `60` | Cooldown after a provider 429, 5xx, timeout or network error. |
+| `GEMINI_API_KEY_1`, `GEMINI_API_KEY_2` | No | empty | Seed keys for the Gemini provider. Admin changes in the database win afterwards. |
+| `GROK_API_KEY_1`, `GROK_API_KEY_2` | No | empty | Seed keys for the OpenAI-compatible provider. Accepts a Groq key (`gsk_`) or an xAI key (`xai-`); all of them must use one vendor. |
 
 ### client/.env
 
 | Variable | Required | Default | Purpose |
 | --- | --- | --- | --- |
 | `VITE_API_URL` | No | `/api` | API base URL. Keep `/api` in development and on Vercel so the proxy or rewrite handles it. Set an absolute URL only when the browser must call the API directly. |
+| `VITE_GOOGLE_CLIENT_ID` | No | empty | Shows the Google buttons on Login and Register. Use the same client id as `GOOGLE_CLIENT_ID`; without it the pages show the plain form. |
 
 `client/.env` is optional. The defaults work for local development and for the Vercel rewrite.
 
@@ -134,6 +146,9 @@ Client (`npm run <script> --prefix client`):
    - `SELF_URL=https://your-service.up.railway.app`
    - `KEEP_ALIVE_MINUTES=4`
    - `ADMIN_EMAIL`, `ADMIN_PASSWORD` (then run the seed once)
+   - `JWT_RESET_SECRET`, `AI_KEY_SECRET`
+   - `GOOGLE_CLIENT_ID`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `RESEND_API_KEY`, `MAIL_FROM` when those features are used
+   - `GEMINI_API_KEY_*`, `GROK_API_KEY_*`, `AI_COOLDOWN_SECONDS` when AI Buddy is used
 7. Deploy, open `/api/health` and confirm `db` is `connected`.
 
 ### 3. Vercel for the client
@@ -176,4 +191,5 @@ Free MongoDB Atlas clusters and free Railway services sleep when idle. Two layer
 - `Invalid environment configuration`: a required variable is missing or too short. The server prints the field names.
 - `Origin not allowed`: the browser origin is not in `CLIENT_URL`.
 - Signed out after every request: the refresh cookie is not reaching the API. Check `COOKIE_SAMESITE`, that the request uses `credentials`, and that the client and API share a site or the client proxies `/api`.
-- `429 Too many requests`: the login limiter allows 20 failed attempts per 15 minutes per IP; the global limiter allows 300 API requests per 15 minutes per IP.
+- `429 Too many requests`: the login limiter allows 20 failed attempts per 15 minutes per IP; the global limiter allows 300 API requests per 15 minutes per IP; the reset routes allow 10 per 15 minutes per IP; the uid lookup allows 30 per minute.
+- AI Buddy answers `503 AI Buddy is busy. Try again in a minute.`: every provider key is cooling down, disabled or marked invalid. Check `GET /api/admin/ai/keys` as an admin.

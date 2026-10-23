@@ -18,6 +18,7 @@ const sizes = {
 
 const Button = forwardRef(function Button(
   {
+    as: Component = "button",
     className,
     variant = "primary",
     size = "md",
@@ -29,11 +30,12 @@ const Button = forwardRef(function Button(
   },
   ref
 ) {
+  const isButton = Component === "button";
+
   return (
-    <button
+    <Component
       ref={ref}
-      type={type}
-      disabled={disabled || loading}
+      {...(isButton ? { type, disabled: disabled || loading } : {})}
       aria-busy={loading || undefined}
       className={cn(
         "inline-flex select-none items-center justify-center rounded-lg font-medium transition duration-150 active:scale-[0.99] disabled:pointer-events-none disabled:opacity-60",
@@ -45,7 +47,7 @@ const Button = forwardRef(function Button(
     >
       {loading ? <Spinner className="h-4 w-4" /> : null}
       {children}
-    </button>
+    </Component>
   );
 });
 
