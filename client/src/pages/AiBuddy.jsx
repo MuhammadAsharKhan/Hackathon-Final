@@ -37,7 +37,7 @@ export default function AiBuddy() {
     <div className="space-y-6">
       <PageHeader
         title="AI Buddy"
-        description="Ask questions and keep the useful answers."
+        description="Chat with the configured provider. Conversations are saved to your account."
       />
 
       <div className="grid gap-6 md:grid-cols-[15rem_minmax(0,1fr)]">

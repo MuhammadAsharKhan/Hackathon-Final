@@ -58,6 +58,60 @@ Rules:
 - Skeletons pulse between opacity 1 and 0.55 over 1.6s.
 - `prefers-reduced-motion` collapses animation and transition durations; never remove the preference block.
 
+## Component-first rule
+
+Pages compose shared components. Do not hand-write a `button`, `input`, `select`, `textarea`, `table` or dialog in a page. A repeated layout or control pattern becomes a shared component instead of a copy. Components in `components/ui` accept `className` and spread the remaining props.
+
+| Component | Use |
+| --- | --- |
+| `Avatar` | User photo or initials at `sm`, `md` or `lg`. |
+| `Badge` | Item status or a short status chip. |
+| `Button` | Every action, with variant, size and loading state. |
+| `Card` | Bordered surface for grouped content and list rows. |
+| `ConfirmDialog` | Destructive confirmation built on `Modal`. |
+| `Container` | Page width and horizontal padding. |
+| `CopyButton` | Clipboard action with a copied state. |
+| `Divider` | Plain separator between alternative actions. |
+| `EmptyState` | Nothing yet, no match or a dismissed error. |
+| `ErrorState` | Failed request with a retry action. |
+| `Field` | Label, hint and error wrapper for one control. |
+| `FormError` | Form-level error text. |
+| `Input` | Single-line text, email, password and number fields. |
+| `Modal` | Dialog, focus trap, scroll lock and mobile sheet. |
+| `OtpInput` | Six digit code entry with paste and auto-advance. |
+| `PageHeader` | Page title, one-line description and actions. |
+| `Pagination` | Total, page count and previous and next controls. |
+| `SectionHeading` | Section title with an optional action. |
+| `Select` | Labeled native select. |
+| `Spinner` | Loading indicator inside a button or page. |
+| `Table` | Table shell, row and cell. |
+| `Tabs` | Keyboard accessible tab list. |
+| `Textarea` | Multiline text input. |
+| `Navbar` | Brand, primary links and the user menu. |
+| `AppLayout` | Navbar, main outlet, footer and profile prompt. |
+| `AuthLayout` | Centered shell for sign-in and registration. |
+| `Footer` | Single-line product footer. |
+| `ScrollManager` | Top reset and hash scrolling for the router. |
+| `ProtectedRoute` | Signed-in and role gate. |
+| `GuestRoute` | Redirects signed-in users away from auth pages. |
+| `AvatarUpload` | Preview, validate and upload a profile photo. |
+| `EmailVerificationFlow` | Email and code steps with a resend countdown. |
+| `ForgotPasswordModal` | Verify, then set a new password from sign-in. |
+| `CompleteProfileModal` | Age request after Google sign-in. |
+| `GoogleButton` | Google credential button when configured. |
+| `GoogleSection` | Google button plus the "or" divider. |
+| `AiChatWidget` | Floating AI panel. |
+| `ChatPanel` | Shared chat layout for page and widget. |
+| `ConversationSidebar` | Conversation list, new chat and delete. |
+| `MessageList` | Empty starters, messages, typing and retry. |
+| `MessageBubble` | User or assistant message with copy and provider. |
+| `MessageInput` | Auto-grow composer with a character limit. |
+| `TypingIndicator` | Three-dot assistant typing status. |
+| `CodeBlock` | Fenced code with a language label and copy. |
+| `Markdown` | Assistant markdown without raw HTML. |
+| `KeyFormModal` | Add or replace an AI provider key. |
+| `KeyStatusBadge` | Active, cooling, invalid or disabled key chip. |
+
 ## Components
 
 `Button`
@@ -130,7 +184,7 @@ Rules:
 - Form errors are text, not color alone.
 - Color contrast: foreground on white is near-black; muted text is used only for secondary information, never for essential labels.
 
-## Copy
+## Copy rules
 
 - Short, factual, neutral. Sentence case.
 - Buttons are verbs: "New item", "Save changes", "Sign out", "Delete item".
@@ -140,6 +194,8 @@ Rules:
 - Empty states are plain: "No items yet", "Create your first item to see it here."
 - No emoji anywhere. No lorem ipsum, no placeholder marketing text, no jokes, no filler.
 - Use "item" as the domain noun in the example module; rename it consistently in a fork.
+
+Banned words and patterns: seamless, elevate, unlock, empower, leverage, robust, cutting-edge, streamline, effortless, revolutionize, supercharge, game-changer, powerful, next-generation, in today's, delve, journey, tailored, holistic, your all-in-one, exclamation marks, rhetorical questions and em dashes used for style.
 
 ## Do and do not
 

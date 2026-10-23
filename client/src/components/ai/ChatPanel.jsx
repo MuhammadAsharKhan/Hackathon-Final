@@ -43,6 +43,7 @@ export default function ChatPanel({
             <Button
               variant="ghost"
               size="sm"
+              className="h-10 sm:h-8"
               onClick={chat.startNewChat}
               disabled={chat.sending}
             >

@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { KeyRound, ListChecks, ShieldCheck } from "lucide-react";
 import Button from "@/components/ui/Button";
+import Card from "@/components/ui/Card";
 import { useAuth } from "@/hooks/useAuth";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
@@ -36,8 +37,7 @@ export default function Home() {
           The baseline is running.
         </h1>
         <p className="mt-5 max-w-xl text-base leading-relaxed text-muted-foreground">
-          Accounts, roles and a working item flow, wired end to end against
-          Express and MongoDB.
+          Accounts, roles and items, connected to Express and MongoDB.
         </p>
         <div className="mt-8 flex flex-wrap items-center gap-3">
           {user ? (
@@ -60,10 +60,16 @@ export default function Home() {
             </>
           )}
         </div>
+        <Link
+          to="#features"
+          className="mt-5 inline-flex min-h-10 items-center text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+        >
+          What is included
+        </Link>
       </section>
 
       <section id="features" aria-label="What is included">
-        <div className="grid gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-3">
+        <Card className="grid gap-px overflow-hidden bg-border sm:grid-cols-3">
           {features.map(({ icon: Icon, title, description }) => (
             <div key={title} className="bg-background p-6">
               <Icon className="h-4 w-4" aria-hidden="true" />
@@ -73,7 +79,7 @@ export default function Home() {
               </p>
             </div>
           ))}
-        </div>
+        </Card>
       </section>
     </div>
   );

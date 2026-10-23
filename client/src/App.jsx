@@ -16,6 +16,7 @@ import Login from "@/pages/Login";
 import NotFound from "@/pages/NotFound";
 import Profile from "@/pages/Profile";
 import Register from "@/pages/Register";
+import VerifyEmail from "@/pages/VerifyEmail";
 
 const AiBuddy = lazy(() => import("@/pages/AiBuddy"));
 const AdminAi = lazy(() => import("@/pages/AdminAi"));
@@ -98,6 +99,7 @@ export default function App() {
         >
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
         </Route>
         </Routes>
       </Suspense>
@@ -112,15 +114,22 @@ export default function App() {
             color: "var(--foreground)",
             border: "1px solid var(--border)",
             borderRadius: "0.5rem",
-            boxShadow: "0 1px 2px rgba(10, 10, 10, 0.06)",
+            boxShadow:
+              "0 1px 2px color-mix(in srgb, var(--foreground) 6%, transparent)",
             fontSize: "14px",
             padding: "10px 14px",
           },
           success: {
-            iconTheme: { primary: "var(--success)", secondary: "#ffffff" },
+            iconTheme: {
+              primary: "var(--success)",
+              secondary: "var(--background)",
+            },
           },
           error: {
-            iconTheme: { primary: "var(--danger)", secondary: "#ffffff" },
+            iconTheme: {
+              primary: "var(--danger)",
+              secondary: "var(--background)",
+            },
           },
         }}
       />

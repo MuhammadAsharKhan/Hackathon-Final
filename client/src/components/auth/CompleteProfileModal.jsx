@@ -8,6 +8,7 @@ import Modal from "@/components/ui/Modal";
 import Select from "@/components/ui/Select";
 import { updateProfile } from "@/api/users.api";
 import { useAuth } from "@/hooks/useAuth";
+import { useMountedRef } from "@/hooks/useMountedRef";
 import { getErrorMessage, getFieldErrors } from "@/lib/errors";
 import { GENDER_CHOICES, validateAge } from "@/lib/validation";
 
@@ -17,56 +18,62 @@ export default function CompleteProfileModal() {
   const { user, updateUser, logout } = useAuth();
   const navigate = useNavigate();
   const open = Boolean(user && user.age === null);
-  const [values, setValues] = useState(EMPTY_FORM);
-  const [errors, setErrors] = useState({});
+  const [profileForm, setProfileForm] = useState(EMPTY_FORM);
+  const [fieldErrors, setFieldErrors] = useState({});
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
+  const mountedRef = useMountedRef();
 
   useEffect(() => {
     if (!open) return;
 
-    setValues(EMPTY_FORM);
-    setErrors({});
+    setProfileForm(EMPTY_FORM);
+    setFieldErrors({});
     setFormError("");
     setSaving(false);
   }, [open]);
 
-  const update = (field) => (event) => {
+  const updateField = (field) => (event) => {
     const { value } = event.target;
-    setValues((previous) => ({ ...previous, [field]: value }));
-    setErrors((previous) => ({ ...previous, [field]: undefined }));
+    setProfileForm((previous) => ({ ...previous, [field]: value }));
+    setFieldErrors((previous) => ({ ...previous, [field]: undefined }));
   };
 
   const handleSignOut = async () => {
     await logout();
+    if (!mountedRef.current) return;
     navigate("/login", { replace: true });
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    const ageError = validateAge(values.age);
-    const nextErrors = {};
+    if (saving) return;
 
+    const ageError = validateAge(profileForm.age);
+    const nextErrors = {};
     if (ageError) nextErrors.age = ageError;
 
-    setErrors(nextErrors);
+    setFieldErrors(nextErrors);
     setFormError("");
     if (Object.keys(nextErrors).length > 0) return;
 
     setSaving(true);
 
     try {
-      const payload = { age: Number(values.age) };
-      if (values.gender) payload.gender = values.gender;
+      const profileUpdates = { age: Number(profileForm.age) };
+      if (profileForm.gender) profileUpdates.gender = profileForm.gender;
 
-      const data = await updateProfile(payload);
-      updateUser(data.user);
+      const profileData = await updateProfile(profileUpdates);
+      if (!mountedRef.current) return;
+
+      updateUser(profileData.user);
       toast.success("Profile complete");
-    } catch (requestError) {
-      setErrors(getFieldErrors(requestError));
-      setFormError(getErrorMessage(requestError));
+    } catch (failure) {
+      if (!mountedRef.current) return;
+      setFieldErrors(getFieldErrors(failure));
+      setFormError(getErrorMessage(failure));
     } finally {
-      setSaving(false);
+      if (mountedRef.current) setSaving(false);
     }
   };
 
@@ -102,15 +109,15 @@ export default function CompleteProfileModal() {
           max={150}
           step={1}
           required
-          value={values.age}
-          onChange={update("age")}
-          error={errors.age}
+          value={profileForm.age}
+          onChange={updateField("age")}
+          error={fieldErrors.age}
         />
         <Select
           label="Gender"
-          value={values.gender}
-          onChange={update("gender")}
-          error={errors.gender}
+          value={profileForm.gender}
+          onChange={updateField("gender")}
+          error={fieldErrors.gender}
         >
           <option value="">Prefer not to say (optional)</option>
           {GENDER_CHOICES.map((option) => (

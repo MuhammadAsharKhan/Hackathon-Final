@@ -1,4 +1,4 @@
-export const PROVIDER_LABELS = {
+const PROVIDER_LABELS = {
   gemini: "Gemini",
   grok: "Grok",
 };

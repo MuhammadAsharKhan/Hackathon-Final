@@ -2,39 +2,45 @@ import crypto from "crypto";
 import { config } from "../config/env.js";
 
 const ALGORITHM = "aes-256-gcm";
-const key = Buffer.from(config.aiKeySecret, "hex");
+const encryptionKey = Buffer.from(config.aiKeySecret, "hex");
 
-export const encryptValue = (plainValue) => {
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
+// Stored as iv.authTag.ciphertext, each part base64 encoded.
+export const encryptSecret = (plainSecret) => {
+  const initializationVector = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv(
+    ALGORITHM,
+    encryptionKey,
+    initializationVector
+  );
   const encrypted = Buffer.concat([
-    cipher.update(plainValue, "utf8"),
+    cipher.update(plainSecret, "utf8"),
     cipher.final(),
   ]);
 
   return [
-    iv.toString("base64"),
+    initializationVector.toString("base64"),
     cipher.getAuthTag().toString("base64"),
     encrypted.toString("base64"),
   ].join(".");
 };
 
-export const decryptValue = (storedValue) => {
-  const [ivPart, tagPart, encryptedPart] = String(storedValue).split(".");
-  if (!ivPart || !tagPart || !encryptedPart) return "";
+export const decryptSecret = (storedCiphertext) => {
+  const [ivPart, authTagPart, encryptedPart] =
+    String(storedCiphertext).split(".");
+  if (!ivPart || !authTagPart || !encryptedPart) return "";
 
   try {
     const decipher = crypto.createDecipheriv(
       ALGORITHM,
-      key,
+      encryptionKey,
       Buffer.from(ivPart, "base64")
     );
-    decipher.setAuthTag(Buffer.from(tagPart, "base64"));
-    const decrypted = Buffer.concat([
+    decipher.setAuthTag(Buffer.from(authTagPart, "base64"));
+    const plaintext = Buffer.concat([
       decipher.update(Buffer.from(encryptedPart, "base64")),
       decipher.final(),
     ]);
-    return decrypted.toString("utf8");
+    return plaintext.toString("utf8");
   } catch {
     return "";
   }

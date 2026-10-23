@@ -9,7 +9,7 @@ export default function AuthLayout() {
         <Container className="flex h-16 items-center">
           <Link
             to="/"
-            className="text-sm font-semibold tracking-tight text-foreground"
+            className="inline-flex min-h-10 items-center text-sm font-semibold tracking-tight text-foreground"
           >
             Baseline
           </Link>

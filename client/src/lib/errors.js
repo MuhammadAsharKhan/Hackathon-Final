@@ -7,9 +7,9 @@ export const getFieldErrors = (error) => {
   const list = error?.response?.data?.errors;
   if (!Array.isArray(list)) return {};
 
-  return list.reduce((fields, entry) => {
-    if (entry?.field && !fields[entry.field]) {
-      fields[entry.field] = entry.message;
+  return list.reduce((fields, fieldError) => {
+    if (fieldError?.field && !fields[fieldError.field]) {
+      fields[fieldError.field] = fieldError.message;
     }
     return fields;
   }, {});

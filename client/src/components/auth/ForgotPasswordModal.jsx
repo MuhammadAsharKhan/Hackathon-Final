@@ -6,6 +6,7 @@ import Input from "@/components/ui/Input";
 import Modal from "@/components/ui/Modal";
 import EmailVerificationFlow from "./EmailVerificationFlow";
 import { resetPassword } from "@/api/auth.api";
+import { useMountedRef } from "@/hooks/useMountedRef";
 import { getErrorMessage, getFieldErrors } from "@/lib/errors";
 import { PASSWORD_HINT, validatePassword } from "@/lib/validation";
 
@@ -18,52 +19,66 @@ export default function ForgotPasswordModal({
 }) {
   const [step, setStep] = useState("verify");
   const [resetToken, setResetToken] = useState("");
-  const [values, setValues] = useState(EMPTY_FORM);
-  const [errors, setErrors] = useState({});
+  const [passwords, setPasswords] = useState(EMPTY_FORM);
+  const [fieldErrors, setFieldErrors] = useState({});
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
+  const mountedRef = useMountedRef();
 
   useEffect(() => {
     if (!open) return;
 
     setStep("verify");
     setResetToken("");
-    setValues(EMPTY_FORM);
-    setErrors({});
+    setPasswords(EMPTY_FORM);
+    setFieldErrors({});
     setFormError("");
     setSaving(false);
   }, [open]);
 
-  const finish = () => {
+  const updatePasswordField = (field) => (event) => {
+    setPasswords((previous) => ({
+      ...previous,
+      [field]: event.target.value,
+    }));
+    setFieldErrors((previous) => ({ ...previous, [field]: undefined }));
+  };
+
+  const finishReset = () => {
     toast.success("Password updated. Sign in with your new password.");
     onClose();
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    if (saving) return;
+
     const nextErrors = {};
-
-    const passwordError = validatePassword(values.password);
+    const passwordError = validatePassword(passwords.password);
     if (passwordError) nextErrors.password = passwordError;
-
-    if (values.password !== values.confirm) {
+    if (passwords.password !== passwords.confirm) {
       nextErrors.confirm = "Passwords do not match";
     }
 
-    setErrors(nextErrors);
+    setFieldErrors(nextErrors);
     setFormError("");
     if (Object.keys(nextErrors).length > 0) return;
 
     setSaving(true);
 
     try {
-      await resetPassword({ resetToken, newPassword: values.password });
-      finish();
+      await resetPassword({
+        resetToken,
+        newPassword: passwords.password,
+      });
+      if (!mountedRef.current) return;
+      finishReset();
     } catch (requestError) {
-      setErrors(getFieldErrors(requestError));
+      if (!mountedRef.current) return;
+      setFieldErrors(getFieldErrors(requestError));
       setFormError(getErrorMessage(requestError));
     } finally {
-      setSaving(false);
+      if (mountedRef.current) setSaving(false);
     }
   };
 
@@ -94,30 +109,18 @@ export default function ForgotPasswordModal({
             label="New password"
             type="password"
             autoComplete="new-password"
-            value={values.password}
-            onChange={(event) => {
-              setValues((previous) => ({
-                ...previous,
-                password: event.target.value,
-              }));
-              setErrors((previous) => ({ ...previous, password: undefined }));
-            }}
-            error={errors.password}
+            value={passwords.password}
+            onChange={updatePasswordField("password")}
+            error={fieldErrors.password}
             hint={PASSWORD_HINT}
           />
           <Input
             label="Confirm new password"
             type="password"
             autoComplete="new-password"
-            value={values.confirm}
-            onChange={(event) => {
-              setValues((previous) => ({
-                ...previous,
-                confirm: event.target.value,
-              }));
-              setErrors((previous) => ({ ...previous, confirm: undefined }));
-            }}
-            error={errors.confirm}
+            value={passwords.confirm}
+            onChange={updatePasswordField("confirm")}
+            error={fieldErrors.confirm}
           />
 
           <FormError bordered>{formError}</FormError>

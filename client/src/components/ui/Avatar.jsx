@@ -15,7 +15,7 @@ const initialsOf = (name) =>
     .slice(0, 2)
     .toUpperCase() || "?";
 
-export default function Avatar({ user, size = "md", className }) {
+export default function Avatar({ user, size = "md", className, ...props }) {
   const sizeClass = sizes[size] || sizes.md;
 
   if (user?.avatarUrl) {
@@ -28,6 +28,7 @@ export default function Avatar({ user, size = "md", className }) {
           sizeClass,
           className
         )}
+        {...props}
       />
     );
   }
@@ -40,6 +41,7 @@ export default function Avatar({ user, size = "md", className }) {
         sizeClass,
         className
       )}
+      {...props}
     >
       {initialsOf(user?.name)}
     </span>

@@ -5,6 +5,7 @@ import Input from "@/components/ui/Input";
 import Modal from "@/components/ui/Modal";
 import Select from "@/components/ui/Select";
 import { createAiKey, updateAiKey } from "@/api/ai.api";
+import { useMountedRef } from "@/hooks/useMountedRef";
 import { getErrorMessage, getFieldErrors } from "@/lib/errors";
 
 const EMPTY_FORM = { provider: "gemini", label: "", apiKey: "" };
@@ -16,58 +17,74 @@ export default function KeyFormModal({
   onClose,
   onSaved,
 }) {
-  const [values, setValues] = useState(EMPTY_FORM);
-  const [errors, setErrors] = useState({});
+  const [keyForm, setKeyForm] = useState(EMPTY_FORM);
+  const [fieldErrors, setFieldErrors] = useState({});
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
+  const mountedRef = useMountedRef();
 
   useEffect(() => {
     if (!open) return;
 
-    setValues(
+    setKeyForm(
       mode === "replace" && keyRecord
-        ? { provider: keyRecord.provider, label: keyRecord.label, apiKey: "" }
+        ? {
+            provider: keyRecord.provider,
+            label: keyRecord.label,
+            apiKey: "",
+          }
         : EMPTY_FORM
     );
-    setErrors({});
+    setFieldErrors({});
     setFormError("");
     setSaving(false);
   }, [open, mode, keyRecord]);
 
-  const update = (field) => (event) => {
+  const updateField = (field) => (event) => {
     const { value } = event.target;
-    setValues((previous) => ({ ...previous, [field]: value }));
-    setErrors((previous) => ({ ...previous, [field]: undefined }));
+    setKeyForm((previous) => ({ ...previous, [field]: value }));
+    setFieldErrors((previous) => ({ ...previous, [field]: undefined }));
+  };
+
+  const saveKey = async () => {
+    if (mode === "replace") {
+      return updateAiKey(keyRecord.id, {
+        apiKey: keyForm.apiKey.trim(),
+      });
+    }
+
+    return createAiKey({
+      provider: keyForm.provider,
+      label: keyForm.label.trim(),
+      apiKey: keyForm.apiKey.trim(),
+    });
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    if (saving) return;
+
     const nextErrors = {};
+    if (!keyForm.apiKey.trim()) {
+      nextErrors.apiKey = "Paste the API key";
+    }
 
-    if (!values.apiKey.trim()) nextErrors.apiKey = "Paste the API key";
-
-    setErrors(nextErrors);
+    setFieldErrors(nextErrors);
     setFormError("");
     if (Object.keys(nextErrors).length > 0) return;
 
     setSaving(true);
 
     try {
-      const data =
-        mode === "replace"
-          ? await updateAiKey(keyRecord.id, { apiKey: values.apiKey.trim() })
-          : await createAiKey({
-              provider: values.provider,
-              label: values.label.trim(),
-              apiKey: values.apiKey.trim(),
-            });
-
-      onSaved(data.key);
-    } catch (requestError) {
-      setErrors(getFieldErrors(requestError));
-      setFormError(getErrorMessage(requestError));
+      const keyData = await saveKey();
+      if (!mountedRef.current) return;
+      onSaved(keyData.key);
+    } catch (failure) {
+      if (!mountedRef.current) return;
+      setFieldErrors(getFieldErrors(failure));
+      setFormError(getErrorMessage(failure));
     } finally {
-      setSaving(false);
+      if (mountedRef.current) setSaving(false);
     }
   };
 
@@ -92,7 +109,12 @@ export default function KeyFormModal({
         </>
       }
     >
-      <form id="ai-key-form" className="space-y-4" onSubmit={handleSubmit} noValidate>
+      <form
+        id="ai-key-form"
+        className="space-y-4"
+        onSubmit={handleSubmit}
+        noValidate
+      >
         {mode === "replace" ? (
           <p className="text-sm text-muted-foreground">
             {keyRecord?.label || "This key"} on{" "}
@@ -102,18 +124,18 @@ export default function KeyFormModal({
           <>
             <Select
               label="Provider"
-              value={values.provider}
-              onChange={update("provider")}
-              error={errors.provider}
+              value={keyForm.provider}
+              onChange={updateField("provider")}
+              error={fieldErrors.provider}
             >
               <option value="gemini">Gemini</option>
               <option value="grok">Grok</option>
             </Select>
             <Input
               label="Label"
-              value={values.label}
-              onChange={update("label")}
-              error={errors.label}
+              value={keyForm.label}
+              onChange={updateField("label")}
+              error={fieldErrors.label}
               maxLength={60}
               placeholder="For example: primary"
             />
@@ -124,9 +146,9 @@ export default function KeyFormModal({
           label="API key"
           type="password"
           autoComplete="off"
-          value={values.apiKey}
-          onChange={update("apiKey")}
-          error={errors.apiKey}
+          value={keyForm.apiKey}
+          onChange={updateField("apiKey")}
+          error={fieldErrors.apiKey}
           placeholder="Paste the provider key"
         />
 

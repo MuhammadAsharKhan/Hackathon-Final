@@ -25,17 +25,28 @@ const envSchema = z.object({
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(7),
   CLIENT_URL: z.string().default("http://localhost:5173"),
   COOKIE_SAMESITE: z.enum(["lax", "strict", "none"]).default("lax"),
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).default(1),
   SELF_URL: z.preprocess(emptyToUndefined, z.string().url().optional()),
   KEEP_ALIVE_MINUTES: z.coerce.number().int().positive().default(4),
   ADMIN_EMAIL: emailField,
   ADMIN_PASSWORD: z.preprocess(
     emptyToUndefined,
-    z.string().min(8).max(72).optional()
+    z
+      .string()
+      .min(8)
+      .max(72)
+      .refine((value) => Buffer.byteLength(value, "utf8") <= 72, {
+        message: "ADMIN_PASSWORD must be at most 72 bytes",
+      })
+      .optional()
   ),
   JWT_RESET_SECRET: z
     .string()
     .min(32, "JWT_RESET_SECRET must be at least 32 characters"),
+  EMAIL_VERIFICATION_REQUIRED: z.enum(["true", "false"]).default("true"),
   GOOGLE_CLIENT_ID: z.preprocess(emptyToUndefined, z.string().optional()),
+  FACEBOOK_APP_ID: z.preprocess(emptyToUndefined, z.string().optional()),
+  FACEBOOK_APP_SECRET: z.preprocess(emptyToUndefined, z.string().optional()),
   CLOUDINARY_CLOUD_NAME: z.preprocess(emptyToUndefined, z.string().optional()),
   CLOUDINARY_API_KEY: z.preprocess(emptyToUndefined, z.string().optional()),
   CLOUDINARY_API_SECRET: z.preprocess(emptyToUndefined, z.string().optional()),
@@ -77,12 +88,16 @@ export const config = Object.freeze({
     .map((origin) => origin.trim())
     .filter(Boolean),
   cookieSameSite: env.COOKIE_SAMESITE,
+  trustProxyHops: env.TRUST_PROXY_HOPS,
   selfUrl: env.SELF_URL ?? "",
   keepAliveMinutes: env.KEEP_ALIVE_MINUTES,
   adminEmail: env.ADMIN_EMAIL ?? "",
   adminPassword: env.ADMIN_PASSWORD ?? "",
   jwtResetSecret: env.JWT_RESET_SECRET,
+  emailVerificationRequired: env.EMAIL_VERIFICATION_REQUIRED !== "false",
   googleClientId: env.GOOGLE_CLIENT_ID ?? "",
+  facebookAppId: env.FACEBOOK_APP_ID ?? "",
+  facebookAppSecret: env.FACEBOOK_APP_SECRET ?? "",
   cloudinaryCloudName: env.CLOUDINARY_CLOUD_NAME ?? "",
   cloudinaryApiKey: env.CLOUDINARY_API_KEY ?? "",
   cloudinaryApiSecret: env.CLOUDINARY_API_SECRET ?? "",

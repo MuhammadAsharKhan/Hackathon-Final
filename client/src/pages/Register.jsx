@@ -6,10 +6,14 @@ import Card from "@/components/ui/Card";
 import FormError from "@/components/ui/FormError";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
+import FacebookSection from "@/components/auth/FacebookSection";
 import GoogleSection from "@/components/auth/GoogleSection";
 import { useAuth } from "@/hooks/useAuth";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { useMountedRef } from "@/hooks/useMountedRef";
 import { getErrorMessage, getFieldErrors } from "@/lib/errors";
+import { redirectPath } from "@/lib/navigation";
+import { savePendingEmail } from "@/lib/pendingVerification";
 import {
   EMAIL_PATTERN,
   GENDER_CHOICES,
@@ -32,11 +36,12 @@ export default function Register() {
   useDocumentTitle("Create account");
   const navigate = useNavigate();
   const location = useLocation();
-  const from = location.state?.from?.pathname || "/dashboard";
+  const from = redirectPath(location);
   const [values, setValues] = useState(EMPTY_FORM);
   const [fieldErrors, setFieldErrors] = useState({});
   const [formError, setFormError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const mountedRef = useMountedRef();
 
   const update = (field) => (event) => {
     const { value } = event.target;
@@ -46,6 +51,7 @@ export default function Register() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    if (submitting) return;
     setFormError("");
 
     const name = values.name.trim();
@@ -69,22 +75,35 @@ export default function Register() {
     setSubmitting(true);
 
     try {
-      const payload = {
+      const accountInput = {
         name,
         email,
         password: values.password,
         age: Number(values.age),
       };
-      if (values.gender) payload.gender = values.gender;
+      if (values.gender) accountInput.gender = values.gender;
 
-      await register(payload);
-      toast.success("Account created");
-      navigate(from, { replace: true });
+      const result = await register(accountInput);
+      if (!mountedRef.current) return;
+
+      if (result.accessToken) {
+        toast.success("Account created");
+        navigate(from, { replace: true });
+        return;
+      }
+
+      savePendingEmail(result.email);
+      toast.success("Verification code sent");
+      navigate("/verify-email", {
+        state: location.state,
+        replace: true,
+      });
     } catch (error) {
+      if (!mountedRef.current) return;
       setFieldErrors(getFieldErrors(error));
       setFormError(getErrorMessage(error));
     } finally {
-      setSubmitting(false);
+      if (mountedRef.current) setSubmitting(false);
     }
   };
 
@@ -154,14 +173,15 @@ export default function Register() {
       </form>
 
       <GoogleSection />
+      <FacebookSection />
 
       <p className="mt-5 text-sm text-muted-foreground">
-        Already registered?{" "}
         <Link
           to="/login"
+          state={location.state}
           className="font-medium text-foreground underline-offset-4 hover:underline"
         >
-          Sign in
+          Sign in to an existing account
         </Link>
       </p>
     </Card>

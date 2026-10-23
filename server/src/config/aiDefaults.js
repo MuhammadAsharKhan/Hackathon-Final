@@ -33,9 +33,36 @@ export const detectGrokVendor = (apiKey) => {
   return prefix ? GROK_VENDORS[prefix] : null;
 };
 
+const isLoopbackHost = (hostname) =>
+  ["localhost", "127.0.0.1", "[::1]", "::1"].includes(hostname);
+
+const isPrivateHost = (hostname) => {
+  if (isLoopbackHost(hostname)) return true;
+  if (/^10\./.test(hostname)) return true;
+  if (/^192\.168\./.test(hostname)) return true;
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(hostname)) return true;
+  if (/^169\.254\./.test(hostname)) return true;
+  return hostname.endsWith(".local") || hostname.endsWith(".internal");
+};
+
+// Production only reaches the public internet over https. Development may use
+// a local mock server, and credentials are never part of a base URL.
 export const isAllowedAiBaseUrl = (value) => {
   if (!value) return false;
-  if (value.startsWith("https://")) return true;
 
-  return !config.isProduction && /^http:\/\/localhost(:\d+)?(\/|$)/.test(value);
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(value);
+  } catch {
+    return false;
+  }
+
+  if (parsedUrl.username || parsedUrl.password) return false;
+
+  if (parsedUrl.protocol === "https:") {
+    return !config.isProduction || !isPrivateHost(parsedUrl.hostname);
+  }
+
+  if (config.isProduction) return false;
+  return parsedUrl.protocol === "http:" && isLoopbackHost(parsedUrl.hostname);
 };

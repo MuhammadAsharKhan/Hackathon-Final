@@ -3,15 +3,15 @@ import { config } from "../config/env.js";
 export const startKeepAlive = () => {
   if (!config.isProduction) return () => {};
 
-  const base =
+  const baseUrl =
     config.selfUrl ||
     (process.env.RAILWAY_PUBLIC_DOMAIN
       ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
       : "");
 
-  if (!base) return () => {};
+  if (!baseUrl) return () => {};
 
-  const url = `${base.replace(/\/+$/, "")}/api/health`;
+  const url = `${baseUrl.replace(/\/+$/, "")}/api/health`;
   const intervalMs = config.keepAliveMinutes * 60 * 1000;
 
   const timer = setInterval(async () => {

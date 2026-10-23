@@ -1,6 +1,11 @@
 import { cn } from "@/lib/cn";
 
-export default function FormError({ children, bordered = false, className }) {
+export default function FormError({
+  children,
+  bordered = false,
+  className,
+  ...props
+}) {
   if (!children) return null;
 
   return (
@@ -11,6 +16,7 @@ export default function FormError({ children, bordered = false, className }) {
         bordered && "rounded-lg border border-danger px-3 py-2",
         className
       )}
+      {...props}
     >
       {children}
     </p>

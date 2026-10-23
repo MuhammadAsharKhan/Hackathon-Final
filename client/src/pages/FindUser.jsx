@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { UserSearch, UserX } from "lucide-react";
 import Avatar from "@/components/ui/Avatar";
 import Button from "@/components/ui/Button";
@@ -10,6 +10,7 @@ import PageHeader from "@/components/ui/PageHeader";
 import ErrorState from "@/components/ui/ErrorState";
 import { findUserByUid } from "@/api/users.api";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { useMountedRef } from "@/hooks/useMountedRef";
 import { getErrorMessage } from "@/lib/errors";
 import { formatDate } from "@/lib/format";
 
@@ -17,46 +18,60 @@ export default function FindUser() {
   useDocumentTitle("Find user");
 
   const [uid, setUid] = useState("");
-  const [result, setResult] = useState(null);
+  const [foundUser, setFoundUser] = useState(null);
   const [notFound, setNotFound] = useState(false);
   const [inputError, setInputError] = useState("");
-  const [requestError, setRequestError] = useState("");
+  const [lookupError, setLookupError] = useState("");
   const [loading, setLoading] = useState(false);
+  const mountedRef = useMountedRef();
+  const requestRef = useRef(0);
 
   const updateUid = (event) => {
+    requestRef.current += 1;
     setUid(event.target.value.replace(/\D/g, "").slice(0, 9));
+    setLoading(false);
     setInputError("");
-    setRequestError("");
+    setLookupError("");
     setNotFound(false);
-    setResult(null);
+    setFoundUser(null);
   };
 
-  const handleSubmit = async (event) => {
-    event.preventDefault();
+  const find = async (candidateUid) => {
+    if (loading) return;
 
-    if (!/^\d{9}$/.test(uid)) {
+    if (!/^\d{9}$/.test(candidateUid)) {
       setInputError("Enter the nine digit user ID");
       return;
     }
 
+    const requestId = ++requestRef.current;
     setLoading(true);
     setInputError("");
-    setRequestError("");
+    setLookupError("");
     setNotFound(false);
-    setResult(null);
+    setFoundUser(null);
 
     try {
-      const data = await findUserByUid(uid);
-      setResult(data.user);
-    } catch (requestError) {
-      if (requestError?.response?.status === 404) {
+      const userData = await findUserByUid(candidateUid);
+      if (!mountedRef.current || requestRef.current !== requestId) return;
+      setFoundUser(userData.user);
+    } catch (failure) {
+      if (!mountedRef.current || requestRef.current !== requestId) return;
+      if (failure?.response?.status === 404) {
         setNotFound(true);
       } else {
-        setRequestError(getErrorMessage(requestError));
+        setLookupError(getErrorMessage(failure));
       }
     } finally {
-      setLoading(false);
+      if (mountedRef.current && requestRef.current === requestId) {
+        setLoading(false);
+      }
     }
+  };
+
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    find(uid);
   };
 
   return (
@@ -96,39 +111,41 @@ export default function FindUser() {
         />
       ) : null}
 
-      {requestError ? (
+      {lookupError ? (
         <ErrorState
           title="Could not look up that user"
-          message={requestError}
-          onRetry={() => setRequestError("")}
+          message={lookupError}
+          onRetry={() => find(uid)}
         />
       ) : null}
 
-      {result ? (
+      {foundUser ? (
         <Card className="max-w-xl p-6">
           <div className="flex items-start gap-4">
-            <Avatar user={result} size="lg" />
+            <Avatar user={foundUser} size="lg" />
             <div className="min-w-0 space-y-1.5">
               <h2 className="truncate text-base font-semibold">
-                {result.name}
+                {foundUser.name}
               </h2>
               <p className="flex items-center gap-1 text-sm text-muted-foreground">
-                <span className="font-mono tabular-nums">UID {result.uid}</span>
+                <span className="font-mono tabular-nums">
+                  UID {foundUser.uid}
+                </span>
                 <CopyButton
-                  value={result.uid}
+                  value={foundUser.uid}
                   label="Copy user id"
-                  className="h-6 w-6"
+                  className="h-10 w-10 sm:h-8 sm:w-8"
                 />
               </p>
               <p className="text-xs text-muted-foreground">
-                Joined {formatDate(result.createdAt)}
+                Joined {formatDate(foundUser.createdAt)}
               </p>
             </div>
           </div>
         </Card>
       ) : null}
 
-      {!result && !notFound && !requestError && !loading ? (
+      {!foundUser && !notFound && !lookupError && !loading ? (
         <EmptyState
           icon={UserSearch}
           title="Find someone by their ID"

@@ -2,11 +2,18 @@ import { AlertCircle } from "lucide-react";
 import Button from "./Button";
 import { cn } from "@/lib/cn";
 
-export default function ErrorState({ title, message, onRetry, className }) {
+export default function ErrorState({
+  title,
+  message,
+  onRetry,
+  className,
+  ...props
+}) {
   return (
     <div
       role="alert"
       className={cn("rounded-xl border border-border p-6", className)}
+      {...props}
     >
       <div className="flex items-start gap-3">
         <AlertCircle

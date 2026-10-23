@@ -2,29 +2,33 @@ import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { config } from "../config/env.js";
 
-const RESET_PURPOSE = "password-reset";
+export const PASSWORD_RESET = "password-reset";
+export const EMAIL_VERIFICATION = "email-verification";
+
 const RESET_TTL = "10m";
 
 export const createOtpCode = () => String(crypto.randomInt(100000, 1000000));
 
-export const hashOtp = (code) =>
+export const hashOtpCode = (code) =>
   crypto
     .createHmac("sha256", config.jwtResetSecret)
     .update(String(code))
     .digest("hex");
 
-export const otpMatches = (code, storedHash) => {
-  const expected = Buffer.from(hashOtp(code), "hex");
-  const stored = Buffer.from(storedHash || "", "hex");
+export const otpCodeMatches = (code, storedHash) => {
+  const expectedHash = Buffer.from(hashOtpCode(code), "hex");
+  const storedHashBytes = Buffer.from(storedHash || "", "hex");
 
-  if (stored.length !== expected.length) return false;
-  return crypto.timingSafeEqual(expected, stored);
+  if (storedHashBytes.length !== expectedHash.length) return false;
+  return crypto.timingSafeEqual(expectedHash, storedHashBytes);
 };
 
+// The token carries a jti that must match the user's current OTP record, so a
+// code can be exchanged for exactly one reset.
 export const signResetToken = (userId) => {
   const jti = crypto.randomBytes(16).toString("hex");
   const token = jwt.sign(
-    { sub: userId, purpose: RESET_PURPOSE, jti },
+    { sub: userId, purpose: PASSWORD_RESET, jti },
     config.jwtResetSecret,
     { expiresIn: RESET_TTL }
   );
@@ -33,11 +37,11 @@ export const signResetToken = (userId) => {
 };
 
 export const verifyResetToken = (token) => {
-  const payload = jwt.verify(token, config.jwtResetSecret);
+  const tokenPayload = jwt.verify(token, config.jwtResetSecret);
 
-  if (payload.purpose !== RESET_PURPOSE) {
+  if (tokenPayload.purpose !== PASSWORD_RESET) {
     throw new Error("Reset token has the wrong purpose");
   }
 
-  return payload;
+  return tokenPayload;
 };

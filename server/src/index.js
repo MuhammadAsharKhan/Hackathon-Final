@@ -4,6 +4,7 @@ import { config } from "./config/env.js";
 import { connectDB } from "./config/db.js";
 import { startKeepAlive } from "./utils/keepAlive.js";
 import { ensureUids } from "./utils/ensureUids.js";
+import { ensureEmailVerification } from "./utils/ensureEmailVerification.js";
 import { setupAi } from "./services/aiSetup.js";
 
 process.on("unhandledRejection", (reason) => {
@@ -14,6 +15,7 @@ process.on("unhandledRejection", (reason) => {
 const start = async () => {
   await connectDB();
   await ensureUids();
+  await ensureEmailVerification();
   await setupAi();
 
   const server = app.listen(config.port, () => {

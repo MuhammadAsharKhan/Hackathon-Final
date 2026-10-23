@@ -10,11 +10,13 @@ export default function ConfirmDialog({
   confirmLabel = "Delete",
   loading = false,
   className,
+  ...props
 }) {
   return (
     <Modal
       open={open}
       onClose={onClose}
+      {...props}
       title={title}
       description={description}
       className={className}

@@ -48,13 +48,17 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    emailVerified: {
+      type: Boolean,
+      default: false,
+    },
     age: {
       type: Number,
       default: null,
       min: [1, "Age must be at least 1"],
       max: [150, "Age must be at most 150"],
       validate: {
-        validator: Number.isInteger,
+        validator: (value) => value === null || Number.isInteger(value),
         message: "Age must be a whole number",
       },
     },
@@ -72,6 +76,11 @@ const userSchema = new mongoose.Schema(
       default: "",
     },
     googleId: {
+      type: String,
+      unique: true,
+      sparse: true,
+    },
+    facebookId: {
       type: String,
       unique: true,
       sparse: true,
@@ -117,18 +126,19 @@ userSchema.methods.comparePassword = function comparePassword(plain) {
 };
 
 userSchema.set("toJSON", {
-  transform: (_doc, ret) => {
-    ret.id = ret._id.toString();
-    if (ret.age === undefined) ret.age = null;
-    if (ret.gender === undefined) ret.gender = null;
-    delete ret._id;
-    delete ret.password;
-    delete ret.refreshTokens;
-    delete ret.previousRefreshToken;
-    delete ret.googleId;
-    delete ret.avatarPublicId;
-    delete ret.__v;
-    return ret;
+  transform: (document, json) => {
+    json.id = json._id.toString();
+    if (json.age === undefined) json.age = null;
+    if (json.gender === undefined) json.gender = null;
+    delete json._id;
+    delete json.password;
+    delete json.refreshTokens;
+    delete json.previousRefreshToken;
+    delete json.googleId;
+    delete json.facebookId;
+    delete json.avatarPublicId;
+    delete json.__v;
+    return json;
   },
 });
 

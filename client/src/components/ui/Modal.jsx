@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -15,9 +15,12 @@ export default function Modal({
   footer,
   className,
   dismissible = true,
+  ...props
 }) {
   const panelRef = useRef(null);
   const onCloseRef = useRef(onClose);
+  const titleId = useId();
+  const descriptionId = useId();
 
   useEffect(() => {
     onCloseRef.current = onClose;
@@ -32,9 +35,12 @@ export default function Modal({
     const previousPaddingRight = document.body.style.paddingRight;
     const scrollbarWidth =
       window.innerWidth - document.documentElement.clientWidth;
+    const reservedGutter =
+      typeof CSS !== "undefined" &&
+      CSS.supports?.("scrollbar-gutter", "stable");
 
     document.body.style.overflow = "hidden";
-    if (scrollbarWidth > 0) {
+    if (scrollbarWidth > 0 && !reservedGutter) {
       document.body.style.paddingRight = `${scrollbarWidth}px`;
     }
 
@@ -43,7 +49,9 @@ export default function Modal({
         (element) => element.offsetParent !== null
       );
 
-    const firstField = panel?.querySelector("input, textarea, select");
+    const firstField = panel?.querySelector(
+      "input:not([disabled]):not([readonly]), textarea:not([disabled]), select:not([disabled])"
+    );
     if (firstField) {
       firstField.focus();
     } else if (panel) {
@@ -99,22 +107,26 @@ export default function Modal({
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-labelledby={title ? "modal-title" : undefined}
+        aria-labelledby={title ? titleId : undefined}
+        aria-describedby={description ? descriptionId : undefined}
         tabIndex={-1}
         className={cn(
           "animate-panel-in relative flex max-h-[calc(100dvh-1rem)] w-full max-w-lg flex-col rounded-t-xl border border-border bg-background shadow-sm sm:max-h-[calc(100dvh-2rem)] sm:rounded-xl",
           className
         )}
+        {...props}
       >
         <div className="flex shrink-0 items-start justify-between gap-4 border-b border-border px-6 py-4">
           <div className="space-y-1">
             {title ? (
-              <h2 id="modal-title" className="text-base font-semibold">
+              <h2 id={titleId} className="text-base font-semibold">
                 {title}
               </h2>
             ) : null}
             {description ? (
-              <p className="text-sm text-muted-foreground">{description}</p>
+              <p id={descriptionId} className="text-sm text-muted-foreground">
+                {description}
+              </p>
             ) : null}
           </div>
           {dismissible ? (
@@ -122,7 +134,7 @@ export default function Modal({
               type="button"
               onClick={() => onCloseRef.current?.()}
               aria-label="Close dialog"
-              className="-mr-1 -mt-1 rounded-md p-1.5 text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground"
+              className="-mr-2 -mt-2 flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground"
             >
               <X className="h-4 w-4" aria-hidden="true" />
             </button>

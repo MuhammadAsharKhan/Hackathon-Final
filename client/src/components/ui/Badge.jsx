@@ -12,7 +12,7 @@ const styles = {
   done: "badge-done",
 };
 
-export default function Badge({ status, children, className }) {
+export default function Badge({ status, children, className, ...props }) {
   return (
     <span
       className={cn(
@@ -20,6 +20,7 @@ export default function Badge({ status, children, className }) {
         styles[status] || "border-border bg-surface text-muted-foreground",
         className
       )}
+      {...props}
     >
       {status === "in_progress" ? (
         <span

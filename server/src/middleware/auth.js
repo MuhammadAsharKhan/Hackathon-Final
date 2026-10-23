@@ -14,15 +14,18 @@ export const protect = asyncHandler(async (req, res, next) => {
   const token = header.slice(7).trim();
   if (!token) throw new ApiError(401, "Not authenticated");
 
-  let payload;
+  let tokenPayload;
   try {
-    payload = jwt.verify(token, config.jwtAccessSecret);
+    tokenPayload = jwt.verify(token, config.jwtAccessSecret);
   } catch {
     throw new ApiError(401, "Invalid or expired token");
   }
 
-  const user = await User.findById(payload.sub);
+  const user = await User.findById(tokenPayload.sub);
   if (!user) throw new ApiError(401, "Not authenticated");
+  if (!user.emailVerified) {
+    throw new ApiError(401, "Verify your email to continue");
+  }
 
   req.user = {
     id: user.id,

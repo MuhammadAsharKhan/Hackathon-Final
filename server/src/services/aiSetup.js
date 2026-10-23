@@ -2,52 +2,55 @@ import AiKey from "../models/AiKey.js";
 import AiSettings from "../models/AiSettings.js";
 import { config } from "../config/env.js";
 import { AI_DEFAULTS, detectGrokVendor } from "../config/aiDefaults.js";
-import { encryptValue } from "../utils/crypto.js";
+import { encryptSecret } from "../utils/crypto.js";
 
 export const loadAiSettings = async () => {
-  const existing = await AiSettings.findOne();
-  if (existing) return existing;
+  const existingSettings = await AiSettings.findOne();
+  if (existingSettings) return existingSettings;
 
   return AiSettings.create({ ...AI_DEFAULTS });
 };
 
-const seedKeys = async () => {
-  const existing = await AiKey.countDocuments();
-  if (existing > 0) return;
+// Environment keys are imported once. After that, the admin page owns them.
+const seedAiKeys = async () => {
+  const existingKeyCount = await AiKey.countDocuments();
+  if (existingKeyCount > 0) return;
 
-  const keys = [
+  const providerKeys = [
     ...config.geminiApiKeys.map((apiKey, index) => ({
       provider: "gemini",
       label: `Gemini ${index + 1}`,
-      encryptedKey: encryptValue(apiKey),
+      encryptedKey: encryptSecret(apiKey),
     })),
     ...config.grokApiKeys.map((apiKey, index) => ({
       provider: "grok",
       label: `Grok ${index + 1}`,
-      encryptedKey: encryptValue(apiKey),
+      encryptedKey: encryptSecret(apiKey),
     })),
   ];
 
-  if (keys.length > 0) await AiKey.insertMany(keys);
+  if (providerKeys.length > 0) await AiKey.insertMany(providerKeys);
 };
 
-const seedSettings = async () => {
-  const existing = await AiSettings.findOne();
-  if (existing) return;
+const seedAiSettings = async () => {
+  const existingSettings = await AiSettings.findOne();
+  if (existingSettings) return;
 
-  const vendor = detectGrokVendor(config.grokApiKeys[0]);
-  const useGrok =
+  const grokVendor = detectGrokVendor(config.grokApiKeys[0]);
+  const grokIsOnlyProvider =
     config.geminiApiKeys.length === 0 && config.grokApiKeys.length > 0;
 
   await AiSettings.create({
     ...AI_DEFAULTS,
-    defaultProvider: useGrok ? "grok" : AI_DEFAULTS.defaultProvider,
-    grokBaseUrl: vendor?.baseUrl ?? AI_DEFAULTS.grokBaseUrl,
-    grokModel: vendor?.model ?? AI_DEFAULTS.grokModel,
+    defaultProvider: grokIsOnlyProvider
+      ? "grok"
+      : AI_DEFAULTS.defaultProvider,
+    grokBaseUrl: grokVendor?.baseUrl ?? AI_DEFAULTS.grokBaseUrl,
+    grokModel: grokVendor?.model ?? AI_DEFAULTS.grokModel,
   });
 };
 
 export const setupAi = async () => {
-  await seedKeys();
-  await seedSettings();
+  await seedAiKeys();
+  await seedAiSettings();
 };

@@ -2,33 +2,38 @@ import AiKey from "../models/AiKey.js";
 import AiSettings from "../models/AiSettings.js";
 import ApiError from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { decryptValue, encryptValue, maskKey } from "../utils/crypto.js";
+import {
+  decryptSecret,
+  encryptSecret,
+  maskKey,
+} from "../utils/crypto.js";
 import { loadAiSettings } from "../services/aiSetup.js";
-import { testAiKey } from "../services/aiKeyPool.js";
+import { testAiKey as runKeyTest } from "../services/aiKeyPool.js";
 
-const presentKey = (key, plainKey) => ({
-  id: key.id,
-  provider: key.provider,
-  label: key.label,
+// Only the last four characters of a stored key leave the server.
+const buildKeyResponse = (keyRecord, plainKey) => ({
+  id: keyRecord.id,
+  provider: keyRecord.provider,
+  label: keyRecord.label,
   maskedKey: maskKey(plainKey || ""),
-  enabled: key.enabled,
-  status: key.status,
-  cooldownUntil: key.cooldownUntil,
-  lastUsedAt: key.lastUsedAt,
-  usageCount: key.usageCount,
-  lastError: key.lastError,
+  enabled: keyRecord.enabled,
+  status: keyRecord.status,
+  cooldownUntil: keyRecord.cooldownUntil,
+  lastUsedAt: keyRecord.lastUsedAt,
+  usageCount: keyRecord.usageCount,
+  lastError: keyRecord.lastError,
 });
 
 export const listAiKeys = asyncHandler(async (req, res) => {
-  const keys = await AiKey.find()
+  const keyRecords = await AiKey.find()
     .sort({ createdAt: 1 })
     .select("+encryptedKey");
 
   res.json({
     success: true,
     data: {
-      keys: keys.map((key) =>
-        presentKey(key, decryptValue(key.encryptedKey))
+      keys: keyRecords.map((keyRecord) =>
+        buildKeyResponse(keyRecord, decryptSecret(keyRecord.encryptedKey))
       ),
     },
   });
@@ -36,45 +41,49 @@ export const listAiKeys = asyncHandler(async (req, res) => {
 
 export const createAiKey = asyncHandler(async (req, res) => {
   const { provider, label, apiKey } = req.body;
-  const key = await AiKey.create({
+  const keyRecord = await AiKey.create({
     provider,
     label,
-    encryptedKey: encryptValue(apiKey),
+    encryptedKey: encryptSecret(apiKey),
   });
 
   res.status(201).json({
     success: true,
-    data: { key: presentKey(key, apiKey) },
+    data: { key: buildKeyResponse(keyRecord, apiKey) },
     message: "Key added",
   });
 });
 
-export const updateAiKey = asyncHandler(async (req, res) => {
+const readKeyUpdates = (body) => {
   const updates = {};
-  if (req.body.label !== undefined) updates.label = req.body.label;
-  if (req.body.enabled !== undefined) updates.enabled = req.body.enabled;
+  if (body.label !== undefined) updates.label = body.label;
+  if (body.enabled !== undefined) updates.enabled = body.enabled;
 
-  if (req.body.apiKey) {
-    updates.encryptedKey = encryptValue(req.body.apiKey);
+  if (body.apiKey) {
+    updates.encryptedKey = encryptSecret(body.apiKey);
     updates.status = "active";
     updates.cooldownUntil = null;
     updates.lastError = "";
   }
 
-  const key = await AiKey.findByIdAndUpdate(
+  return updates;
+};
+
+export const updateAiKey = asyncHandler(async (req, res) => {
+  const keyRecord = await AiKey.findByIdAndUpdate(
     req.params.id,
-    { $set: updates },
+    { $set: readKeyUpdates(req.body) },
     { new: true }
   ).select("+encryptedKey");
 
-  if (!key) throw new ApiError(404, "Key not found");
+  if (!keyRecord) throw new ApiError(404, "Key not found");
 
   res.json({
     success: true,
     data: {
-      key: presentKey(
-        key,
-        req.body.apiKey || decryptValue(key.encryptedKey)
+      key: buildKeyResponse(
+        keyRecord,
+        req.body.apiKey || decryptSecret(keyRecord.encryptedKey)
       ),
     },
     message: "Key updated",
@@ -82,8 +91,8 @@ export const updateAiKey = asyncHandler(async (req, res) => {
 });
 
 export const deleteAiKey = asyncHandler(async (req, res) => {
-  const key = await AiKey.findByIdAndDelete(req.params.id);
-  if (!key) throw new ApiError(404, "Key not found");
+  const keyRecord = await AiKey.findByIdAndDelete(req.params.id);
+  if (!keyRecord) throw new ApiError(404, "Key not found");
 
   res.json({
     success: true,
@@ -92,16 +101,18 @@ export const deleteAiKey = asyncHandler(async (req, res) => {
   });
 });
 
-export const testAiKeyById = asyncHandler(async (req, res) => {
-  const key = await AiKey.findById(req.params.id).select("+encryptedKey");
-  if (!key) throw new ApiError(404, "Key not found");
+export const testStoredAiKey = asyncHandler(async (req, res) => {
+  const keyRecord = await AiKey.findById(req.params.id).select(
+    "+encryptedKey"
+  );
+  if (!keyRecord) throw new ApiError(404, "Key not found");
 
-  const result = await testAiKey(key);
+  const testResult = await runKeyTest(keyRecord);
 
   res.json({
     success: true,
-    data: result,
-    message: result.ok ? "Key works" : "Key failed the test",
+    data: testResult,
+    message: testResult.ok ? "Key works" : "Key failed the test",
   });
 });
 
@@ -110,20 +121,26 @@ export const getAiSettings = asyncHandler(async (req, res) => {
   res.json({ success: true, data: { settings } });
 });
 
+const trimTrailingSlashes = (value) => value.replace(/\/+$/, "");
+
 export const updateAiSettings = asyncHandler(async (req, res) => {
-  const updates = { ...req.body };
-  if (updates.geminiBaseUrl) {
-    updates.geminiBaseUrl = updates.geminiBaseUrl.replace(/\/+$/, "");
+  const settingsUpdates = { ...req.body };
+  if (settingsUpdates.geminiBaseUrl) {
+    settingsUpdates.geminiBaseUrl = trimTrailingSlashes(
+      settingsUpdates.geminiBaseUrl
+    );
   }
-  if (updates.grokBaseUrl) {
-    updates.grokBaseUrl = updates.grokBaseUrl.replace(/\/+$/, "");
+  if (settingsUpdates.grokBaseUrl) {
+    settingsUpdates.grokBaseUrl = trimTrailingSlashes(
+      settingsUpdates.grokBaseUrl
+    );
   }
 
   await loadAiSettings();
 
   const settings = await AiSettings.findOneAndUpdate(
     {},
-    { $set: updates },
+    { $set: settingsUpdates },
     { new: true, runValidators: true }
   );
 

@@ -7,9 +7,9 @@ import { cn } from "@/lib/cn";
 const MAX_HEIGHT = 160;
 
 export default function MessageInput({ onSend, disabled = false, className }) {
-  const [value, setValue] = useState("");
+  const [draft, setDraft] = useState("");
   const textareaRef = useRef(null);
-  const showCounter = value.length >= MAX_MESSAGE_LENGTH - 300;
+  const showCounter = draft.length >= MAX_MESSAGE_LENGTH - 300;
 
   useEffect(() => {
     const node = textareaRef.current;
@@ -17,13 +17,13 @@ export default function MessageInput({ onSend, disabled = false, className }) {
 
     node.style.height = "auto";
     node.style.height = `${Math.min(node.scrollHeight, MAX_HEIGHT)}px`;
-  }, [value]);
+  }, [draft]);
 
-  const submit = () => {
-    const message = value.trim();
+  const sendMessage = () => {
+    const message = draft.trim();
     if (!message || disabled) return;
 
-    setValue("");
+    setDraft("");
     onSend(message);
   };
 
@@ -32,7 +32,7 @@ export default function MessageInput({ onSend, disabled = false, className }) {
     if (event.nativeEvent.isComposing) return;
 
     event.preventDefault();
-    submit();
+    sendMessage();
   };
 
   return (
@@ -41,27 +41,27 @@ export default function MessageInput({ onSend, disabled = false, className }) {
         className="mx-auto w-full max-w-3xl"
         onSubmit={(event) => {
           event.preventDefault();
-          submit();
+          sendMessage();
         }}
       >
         <div className="flex items-end gap-2 rounded-xl border border-border bg-background p-1.5 transition-colors duration-150 focus-within:border-foreground">
           <textarea
             ref={textareaRef}
             rows={1}
-            value={value}
-            onChange={(event) => setValue(event.target.value)}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
             onKeyDown={handleKeyDown}
             maxLength={MAX_MESSAGE_LENGTH}
             disabled={disabled}
             aria-label="Message"
             placeholder="Send a message"
-            className="max-h-40 min-h-10 w-full resize-none bg-transparent px-2.5 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
+            className="max-h-40 min-h-10 w-full resize-none bg-transparent px-2.5 py-2 text-sm text-foreground placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
           />
           <Button
             type="submit"
             size="sm"
             className="h-10 w-10 shrink-0 px-0"
-            disabled={!value.trim() || disabled}
+            disabled={!draft.trim() || disabled}
             aria-label="Send message"
           >
             <ArrowUp className="h-4 w-4" aria-hidden="true" />
@@ -75,7 +75,7 @@ export default function MessageInput({ onSend, disabled = false, className }) {
           <span className="sm:hidden">Enter to send</span>
           {showCounter ? (
             <span className="tabular-nums">
-              {value.length}/{MAX_MESSAGE_LENGTH}
+              {draft.length}/{MAX_MESSAGE_LENGTH}
             </span>
           ) : null}
         </div>

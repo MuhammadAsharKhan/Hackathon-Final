@@ -33,11 +33,11 @@ const aiSettingsSchema = new mongoose.Schema(
 );
 
 aiSettingsSchema.set("toJSON", {
-  transform: (_doc, ret) => {
-    ret.id = ret._id.toString();
-    delete ret._id;
-    delete ret.__v;
-    return ret;
+  transform: (document, json) => {
+    json.id = json._id.toString();
+    delete json._id;
+    delete json.__v;
+    return json;
   },
 });
 

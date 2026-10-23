@@ -28,7 +28,7 @@ export default function CodeBlock({ code, language = "text" }) {
         <Button
           variant="ghost"
           size="sm"
-          className="h-7 px-2 text-xs"
+          className="h-10 px-2 text-xs sm:h-7"
           onClick={handleCopy}
           aria-label="Copy code"
         >

@@ -5,79 +5,97 @@ import Button from "@/components/ui/Button";
 import FormError from "@/components/ui/FormError";
 import { uploadAvatar, deleteAvatar } from "@/api/users.api";
 import { useAuth } from "@/hooks/useAuth";
+import { useMountedRef } from "@/hooks/useMountedRef";
 import { getErrorMessage } from "@/lib/errors";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_BYTES = 2 * 1024 * 1024;
 
+const validateImage = (file) => {
+  if (!ALLOWED_TYPES.includes(file.type)) {
+    return "Choose a JPEG, PNG or WebP image.";
+  }
+  if (file.size > MAX_BYTES) {
+    return "Image must be 2 MB or smaller.";
+  }
+  return "";
+};
+
 export default function AvatarUpload() {
   const { user, updateUser } = useAuth();
   const inputRef = useRef(null);
-  const [preview, setPreview] = useState("");
+  const [previewUrl, setPreviewUrl] = useState("");
   const [error, setError] = useState("");
   const [uploading, setUploading] = useState(false);
   const [removing, setRemoving] = useState(false);
+  const mountedRef = useMountedRef();
 
   useEffect(() => {
-    if (!preview) return;
+    if (!previewUrl) return;
 
-    return () => URL.revokeObjectURL(preview);
-  }, [preview]);
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [previewUrl]);
 
-  const chooseFile = () => {
+  const openFilePicker = () => {
     setError("");
     inputRef.current?.click();
   };
 
   const handleFile = async (event) => {
+    if (uploading || removing) return;
+
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
 
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      setError("Choose a JPEG, PNG or WebP image.");
+    const fileError = validateImage(file);
+    if (fileError) {
+      setError(fileError);
       return;
     }
 
-    if (file.size > MAX_BYTES) {
-      setError("Image must be 2 MB or smaller.");
-      return;
-    }
-
-    setPreview(URL.createObjectURL(file));
+    // Show the local file immediately while Cloudinary receives the upload.
+    setPreviewUrl(URL.createObjectURL(file));
     setUploading(true);
     setError("");
 
     try {
-      const data = await uploadAvatar(file);
-      updateUser(data.user);
-      setPreview("");
+      const profileData = await uploadAvatar(file);
+      if (!mountedRef.current) return;
+      updateUser(profileData.user);
+      setPreviewUrl("");
       toast.success("Photo updated");
-    } catch (requestError) {
-      setPreview("");
-      setError(getErrorMessage(requestError));
+    } catch (failure) {
+      if (!mountedRef.current) return;
+      setPreviewUrl("");
+      setError(getErrorMessage(failure));
     } finally {
-      setUploading(false);
+      if (mountedRef.current) setUploading(false);
     }
   };
 
   const handleRemove = async () => {
+    if (uploading || removing) return;
     setRemoving(true);
     setError("");
 
     try {
-      const data = await deleteAvatar();
-      updateUser(data.user);
-      setPreview("");
+      const profileData = await deleteAvatar();
+      if (!mountedRef.current) return;
+      updateUser(profileData.user);
+      setPreviewUrl("");
       toast.success("Photo removed");
-    } catch (requestError) {
-      setError(getErrorMessage(requestError));
+    } catch (failure) {
+      if (!mountedRef.current) return;
+      setError(getErrorMessage(failure));
     } finally {
-      setRemoving(false);
+      if (mountedRef.current) setRemoving(false);
     }
   };
 
-  const shownUser = preview ? { ...user, avatarUrl: preview } : user;
+  const shownUser = previewUrl
+    ? { ...user, avatarUrl: previewUrl }
+    : user;
 
   return (
     <div className="space-y-3">
@@ -87,7 +105,7 @@ export default function AvatarUpload() {
         <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="secondary"
-            onClick={chooseFile}
+            onClick={openFilePicker}
             loading={uploading}
             disabled={removing}
           >

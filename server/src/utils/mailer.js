@@ -2,6 +2,7 @@ import { config } from "../config/env.js";
 
 const RESEND_URL = "https://api.resend.com/emails";
 
+// Without a Resend key, development prints the email instead of failing.
 export const sendEmail = async ({ to, subject, text, html }) => {
   if (!config.resendApiKey) {
     if (config.isProduction) {

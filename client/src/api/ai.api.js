@@ -2,8 +2,8 @@ import http from "./http";
 
 const unwrap = (response) => response.data.data;
 
-export const sendChat = (payload) =>
-  http.post("/ai/chat", payload).then(unwrap);
+export const sendChat = (chatInput) =>
+  http.post("/ai/chat", chatInput).then(unwrap);
 
 export const listConversations = () =>
   http.get("/ai/conversations").then(unwrap);
@@ -16,11 +16,11 @@ export const deleteConversation = (uid) =>
 
 export const listAiKeys = () => http.get("/admin/ai/keys").then(unwrap);
 
-export const createAiKey = (payload) =>
-  http.post("/admin/ai/keys", payload).then(unwrap);
+export const createAiKey = (keyInput) =>
+  http.post("/admin/ai/keys", keyInput).then(unwrap);
 
-export const updateAiKey = (id, payload) =>
-  http.patch(`/admin/ai/keys/${id}`, payload).then(unwrap);
+export const updateAiKey = (id, updates) =>
+  http.patch(`/admin/ai/keys/${id}`, updates).then(unwrap);
 
 export const deleteAiKey = (id) =>
   http.delete(`/admin/ai/keys/${id}`).then(unwrap);
@@ -30,5 +30,5 @@ export const testAiKey = (id) =>
 
 export const getAiSettings = () => http.get("/admin/ai/settings").then(unwrap);
 
-export const updateAiSettings = (payload) =>
-  http.put("/admin/ai/settings", payload).then(unwrap);
+export const updateAiSettings = (settingsUpdates) =>
+  http.put("/admin/ai/settings", settingsUpdates).then(unwrap);

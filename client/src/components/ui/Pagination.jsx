@@ -7,7 +7,10 @@ export default function Pagination({
   total,
   onChange,
   disabled = false,
+  itemLabel = "items",
+  itemLabelSingular = "item",
   className,
+  ...props
 }) {
   if (!pages || pages <= 1) return null;
 
@@ -17,9 +20,10 @@ export default function Pagination({
         "flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between",
         className
       )}
+      {...props}
     >
       <p className="text-sm text-muted-foreground">
-        {total} {total === 1 ? "item" : "items"}
+        {total} {total === 1 ? itemLabelSingular : itemLabel}
       </p>
       <div className="flex items-center gap-2">
         <Button

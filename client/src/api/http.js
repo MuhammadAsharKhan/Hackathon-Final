@@ -6,20 +6,26 @@ const http = axios.create({
   withCredentials: true,
 });
 
-http.interceptors.request.use((config) => {
+http.interceptors.request.use((requestConfig) => {
   const token = getToken();
   if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+    requestConfig.headers.Authorization = `Bearer ${token}`;
   }
-  return config;
+  return requestConfig;
 });
 
-const AUTH_PATHS = ["/auth/login", "/auth/register", "/auth/refresh"];
-const isAuthPath = (url = "") =>
-  AUTH_PATHS.some((path) => url.includes(path));
+const NO_REFRESH_PATHS = [
+  "/auth/login",
+  "/auth/register",
+  "/auth/refresh",
+];
+
+const shouldSkipRefresh = (url = "") =>
+  NO_REFRESH_PATHS.some((path) => url.includes(path));
 
 let refreshPromise = null;
 
+// Only one refresh runs at a time. Other 401 responses wait for its result.
 export const refreshSession = () => {
   if (!refreshPromise) {
     refreshPromise = http
@@ -37,23 +43,31 @@ export const refreshSession = () => {
   return refreshPromise;
 };
 
+const retryWithFreshToken = async (config) => {
+  config.retried = true;
+  const session = await refreshSession();
+  config.headers = config.headers || {};
+  config.headers.Authorization = `Bearer ${session.accessToken}`;
+  return http(config);
+};
+
 http.interceptors.response.use(
   (response) => response,
   async (error) => {
     const config = error.config;
     const status = error.response?.status;
 
-    if (status !== 401 || !config || config._retry || isAuthPath(config.url)) {
+    if (
+      status !== 401 ||
+      !config ||
+      config.retried ||
+      shouldSkipRefresh(config.url)
+    ) {
       return Promise.reject(error);
     }
 
-    config._retry = true;
-
     try {
-      const session = await refreshSession();
-      config.headers = config.headers || {};
-      config.headers.Authorization = `Bearer ${session.accessToken}`;
-      return http(config);
+      return await retryWithFreshToken(config);
     } catch (refreshError) {
       clearToken();
       window.dispatchEvent(new Event("auth:logout"));

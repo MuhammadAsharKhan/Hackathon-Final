@@ -1,24 +1,16 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import AvatarUpload from "@/components/profile/AvatarUpload";
-import EmailVerificationFlow from "@/components/auth/EmailVerificationFlow";
-import Button from "@/components/ui/Button";
-import Card from "@/components/ui/Card";
-import CopyButton from "@/components/ui/CopyButton";
-import FormError from "@/components/ui/FormError";
-import Input from "@/components/ui/Input";
-import Modal from "@/components/ui/Modal";
+import AccountPanel from "@/components/profile/AccountPanel";
+import PasswordPanel from "@/components/profile/PasswordPanel";
 import PageHeader from "@/components/ui/PageHeader";
-import Select from "@/components/ui/Select";
 import Tabs, { tabId, tabPanelId } from "@/components/ui/Tabs";
 import { changePassword, updateProfile } from "@/api/users.api";
 import { useAuth } from "@/hooks/useAuth";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { useMountedRef } from "@/hooks/useMountedRef";
 import { getErrorMessage, getFieldErrors } from "@/lib/errors";
 import { setToken } from "@/lib/tokenStore";
 import {
-  GENDER_OPTIONS,
-  PASSWORD_HINT,
   validateAge,
   validateName,
   validatePassword,
@@ -35,11 +27,51 @@ const EMPTY_PASSWORDS = {
   confirm: "",
 };
 
+const validateAccountInput = ({ name, age }) => {
+  const errors = {};
+
+  const nameError = validateName(name);
+  if (nameError) errors.name = nameError;
+
+  const ageError = validateAge(age);
+  if (ageError) errors.age = ageError;
+
+  return errors;
+};
+
+const validatePasswordInput = (passwords, user, verified) => {
+  const errors = {};
+
+  if (user?.hasPassword && !verified && !passwords.currentPassword) {
+    errors.currentPassword = "Enter your current password";
+  }
+
+  const newPasswordError = validatePassword(passwords.newPassword);
+  if (newPasswordError) errors.newPassword = newPasswordError;
+
+  if (
+    user?.hasPassword &&
+    !verified &&
+    passwords.newPassword &&
+    passwords.newPassword === passwords.currentPassword
+  ) {
+    errors.newPassword =
+      "New password must be different from the current password";
+  }
+
+  if (passwords.newPassword !== passwords.confirm) {
+    errors.confirm = "Passwords do not match";
+  }
+
+  return errors;
+};
+
 export default function Profile() {
   const { user, updateUser } = useAuth();
   useDocumentTitle("Profile");
 
   const [tab, setTab] = useState("account");
+  const mountedRef = useMountedRef();
 
   const [account, setAccount] = useState({
     name: user?.name || "",
@@ -57,6 +89,15 @@ export default function Profile() {
   const [verified, setVerified] = useState(false);
   const [resetToken, setResetToken] = useState("");
   const [verifyOpen, setVerifyOpen] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    setAccount((previous) => ({
+      ...previous,
+      age: user.age ?? "",
+      gender: user.gender ?? "",
+    }));
+  }, [user?.age, user?.gender]);
 
   const updateAccount = (field) => (event) => {
     const { value } = event.target;
@@ -81,14 +122,9 @@ export default function Profile() {
 
   const handleAccountSubmit = async (event) => {
     event.preventDefault();
-    const nextErrors = {};
+    if (savingAccount) return;
 
-    const nameError = validateName(account.name);
-    if (nameError) nextErrors.name = nameError;
-
-    const ageError = validateAge(account.age);
-    if (ageError) nextErrors.age = ageError;
-
+    const nextErrors = validateAccountInput(account);
     setAccountErrors(nextErrors);
     setAccountError("");
     if (Object.keys(nextErrors).length > 0) return;
@@ -96,48 +132,38 @@ export default function Profile() {
     setSavingAccount(true);
 
     try {
-      const payload = {
+      const profileUpdates = {
         name: account.name.trim(),
         age: Number(account.age),
       };
-      if (account.gender) payload.gender = account.gender;
+      if (account.gender) profileUpdates.gender = account.gender;
 
-      const data = await updateProfile(payload);
-      updateUser(data.user);
+      const profileData = await updateProfile(profileUpdates);
+      if (!mountedRef.current) return;
+
+      updateUser(profileData.user);
+      setAccount({
+        name: profileData.user.name || "",
+        age: profileData.user.age ?? "",
+        gender: profileData.user.gender ?? "",
+      });
+      setAccountErrors({});
+      setAccountError("");
       toast.success("Profile updated");
     } catch (requestError) {
+      if (!mountedRef.current) return;
       setAccountErrors(getFieldErrors(requestError));
       setAccountError(getErrorMessage(requestError));
     } finally {
-      setSavingAccount(false);
+      if (mountedRef.current) setSavingAccount(false);
     }
   };
 
   const handlePasswordSubmit = async (event) => {
     event.preventDefault();
-    const nextErrors = {};
+    if (savingPassword) return;
 
-    if (user?.hasPassword && !verified && !passwords.currentPassword) {
-      nextErrors.currentPassword = "Enter your current password";
-    }
-
-    const newPasswordError = validatePassword(passwords.newPassword);
-    if (newPasswordError) nextErrors.newPassword = newPasswordError;
-
-    if (
-      user?.hasPassword &&
-      !verified &&
-      passwords.newPassword &&
-      passwords.newPassword === passwords.currentPassword
-    ) {
-      nextErrors.newPassword =
-        "New password must be different from the current password";
-    }
-
-    if (passwords.newPassword !== passwords.confirm) {
-      nextErrors.confirm = "Passwords do not match";
-    }
-
+    const nextErrors = validatePasswordInput(passwords, user, verified);
     setPasswordErrors(nextErrors);
     setPasswordError("");
     if (Object.keys(nextErrors).length > 0) return;
@@ -145,23 +171,26 @@ export default function Profile() {
     setSavingPassword(true);
 
     try {
-      const payload = verified
+      const passwordInput = verified
         ? { resetToken, newPassword: passwords.newPassword }
         : {
             currentPassword: passwords.currentPassword,
             newPassword: passwords.newPassword,
           };
 
-      const data = await changePassword(payload);
-      setToken(data.accessToken);
-      updateUser(data.user);
+      const passwordData = await changePassword(passwordInput);
+      if (!mountedRef.current) return;
+
+      setToken(passwordData.accessToken);
+      updateUser(passwordData.user);
       resetPasswordForm();
       toast.success("Password updated. Other sessions were signed out.");
     } catch (requestError) {
+      if (!mountedRef.current) return;
       setPasswordErrors(getFieldErrors(requestError));
       setPasswordError(getErrorMessage(requestError));
     } finally {
-      setSavingPassword(false);
+      if (mountedRef.current) setSavingPassword(false);
     }
   };
 
@@ -197,76 +226,15 @@ export default function Profile() {
           aria-labelledby={tabId("profile", "account")}
           className="pt-2"
         >
-          <Card className="p-6">
-            <AvatarUpload />
-
-            <form
-              className="mt-6 space-y-4"
-              onSubmit={handleAccountSubmit}
-              noValidate
-            >
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Input
-                  label="Name"
-                  autoComplete="name"
-                  value={account.name}
-                  onChange={updateAccount("name")}
-                  error={accountErrors.name}
-                />
-                <Input
-                  label="Age"
-                  type="number"
-                  inputMode="numeric"
-                  min={1}
-                  max={150}
-                  step={1}
-                  value={account.age}
-                  onChange={updateAccount("age")}
-                  error={accountErrors.age}
-                />
-                <Select
-                  label="Gender"
-                  value={account.gender}
-                  onChange={updateAccount("gender")}
-                  error={accountErrors.gender}
-                >
-                  <option value="">Not set</option>
-                  {GENDER_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </Select>
-                <Input
-                  label="Email"
-                  type="email"
-                  value={user?.email || ""}
-                  readOnly
-                  className="bg-surface text-muted-foreground"
-                />
-              </div>
-
-              <div className="flex items-end gap-2">
-                <Input
-                  label="User ID"
-                  value={user?.uid || ""}
-                  readOnly
-                  className="bg-surface font-mono tabular-nums text-muted-foreground"
-                />
-                <CopyButton
-                  value={user?.uid || ""}
-                  label="Copy user id"
-                  className="mb-1 h-8 w-8"
-                />
-              </div>
-
-              <FormError>{accountError}</FormError>
-
-              <Button type="submit" loading={savingAccount}>
-                Save changes
-              </Button>
-            </form>
-          </Card>
+          <AccountPanel
+            user={user}
+            account={account}
+            errors={accountErrors}
+            formError={accountError}
+            saving={savingAccount}
+            onChange={updateAccount}
+            onSubmit={handleAccountSubmit}
+          />
         </div>
       ) : (
         <div
@@ -275,95 +243,21 @@ export default function Profile() {
           aria-labelledby={tabId("profile", "passwords")}
           className="pt-2"
         >
-          <Card className="max-w-xl p-6">
-            <form
-              className="space-y-4"
-              onSubmit={handlePasswordSubmit}
-              noValidate
-            >
-              {user?.hasPassword ? null : (
-                <p className="text-sm text-muted-foreground">
-                  This account has no password yet. Verify your email to set
-                  one.
-                </p>
-              )}
-
-              {showCurrentPassword ? (
-                <>
-                  <Input
-                    label="Current password"
-                    type="password"
-                    autoComplete="current-password"
-                    value={passwords.currentPassword}
-                    onChange={updatePassword("currentPassword")}
-                    error={passwordErrors.currentPassword}
-                  />
-                  <div className="flex justify-end">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-auto px-0 text-xs text-muted-foreground hover:bg-transparent hover:text-foreground"
-                      onClick={() => setVerifyOpen(true)}
-                    >
-                      Forgot password?
-                    </Button>
-                  </div>
-                </>
-              ) : verified ? (
-                <Input
-                  label="Current password"
-                  value="Verified via email"
-                  disabled
-                  readOnly
-                  className="bg-surface text-muted-foreground"
-                />
-              ) : (
-                <Button
-                  variant="secondary"
-                  onClick={() => setVerifyOpen(true)}
-                >
-                  Verify via email
-                </Button>
-              )}
-
-              <Input
-                label="New password"
-                type="password"
-                autoComplete="new-password"
-                value={passwords.newPassword}
-                onChange={updatePassword("newPassword")}
-                error={passwordErrors.newPassword}
-                hint={PASSWORD_HINT}
-              />
-              <Input
-                label="Confirm new password"
-                type="password"
-                autoComplete="new-password"
-                value={passwords.confirm}
-                onChange={updatePassword("confirm")}
-                error={passwordErrors.confirm}
-              />
-
-              <FormError>{passwordError}</FormError>
-
-              <Button type="submit" loading={savingPassword}>
-                Save password
-              </Button>
-            </form>
-          </Card>
-
-          <Modal
-            open={verifyOpen}
-            onClose={() => setVerifyOpen(false)}
-            title="Verify your email"
-            description="We will email a six digit code to confirm it is you."
-          >
-            <EmailVerificationFlow
-              initialEmail={user?.email || ""}
-              lockEmail
-              onVerified={handleVerified}
-            />
-          </Modal>
+          <PasswordPanel
+            user={user}
+            passwords={passwords}
+            errors={passwordErrors}
+            formError={passwordError}
+            saving={savingPassword}
+            verified={verified}
+            showCurrentPassword={showCurrentPassword}
+            verifyOpen={verifyOpen}
+            onChange={updatePassword}
+            onSubmit={handlePasswordSubmit}
+            onOpenVerification={() => setVerifyOpen(true)}
+            onCloseVerification={() => setVerifyOpen(false)}
+            onVerified={handleVerified}
+          />
         </div>
       )}
     </div>

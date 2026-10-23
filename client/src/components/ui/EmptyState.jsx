@@ -6,6 +6,7 @@ export default function EmptyState({
   description,
   action,
   className,
+  ...props
 }) {
   return (
     <div
@@ -13,6 +14,7 @@ export default function EmptyState({
         "flex flex-col items-center justify-center rounded-xl border border-dashed border-border px-6 py-16 text-center",
         className
       )}
+      {...props}
     >
       {Icon ? (
         <Icon className="h-5 w-5 text-muted-foreground" aria-hidden="true" />

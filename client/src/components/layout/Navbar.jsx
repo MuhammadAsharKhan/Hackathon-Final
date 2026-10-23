@@ -74,7 +74,7 @@ export default function Navbar() {
         <div className="flex items-center gap-8">
           <Link
             to="/"
-            className="text-sm font-semibold tracking-tight text-foreground"
+            className="inline-flex min-h-10 items-center text-sm font-semibold tracking-tight text-foreground"
           >
             Baseline
           </Link>

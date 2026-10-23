@@ -1,12 +1,13 @@
 import { ZodError } from "zod";
 import ApiError from "../utils/ApiError.js";
 
-const toResponse = (err) => {
+const normalizeError = (err) => {
   if (err instanceof ApiError) {
     return {
       statusCode: err.statusCode,
       message: err.message,
       errors: err.errors,
+      code: err.code,
     };
   }
 
@@ -25,9 +26,9 @@ const toResponse = (err) => {
     return {
       statusCode: 400,
       message: "Validation failed",
-      errors: Object.values(err.errors).map((entry) => ({
-        field: entry.path,
-        message: entry.message,
+      errors: Object.values(err.errors).map((fieldError) => ({
+        field: fieldError.path,
+        message: fieldError.message,
       })),
     };
   }
@@ -63,13 +64,14 @@ const toResponse = (err) => {
 };
 
 export const errorHandler = (err, req, res, next) => {
-  const { statusCode, message, errors } = toResponse(err);
+  const { statusCode, message, errors, code } = normalizeError(err);
 
   if (statusCode >= 500) {
     console.error(err.stack || err.message);
   }
 
   const body = { success: false, message };
+  if (code) body.code = code;
   if (errors && errors.length > 0) body.errors = errors;
 
   res.status(statusCode).json(body);

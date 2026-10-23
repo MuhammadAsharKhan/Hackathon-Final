@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import { useMountedRef } from "@/hooks/useMountedRef";
 import { cn } from "@/lib/cn";
 import { formatShortDate } from "@/lib/format";
 
@@ -13,12 +14,14 @@ export default function ConversationSidebar({
 }) {
   const [deleting, setDeleting] = useState(null);
   const [removing, setRemoving] = useState(false);
+  const mountedRef = useMountedRef();
 
   const handleDelete = async () => {
-    if (!deleting) return;
+    if (!deleting || removing) return;
 
     setRemoving(true);
     const removed = await chat.removeConversation(deleting.uid);
+    if (!mountedRef.current) return;
     setRemoving(false);
 
     if (removed) setDeleting(null);
@@ -71,7 +74,7 @@ export default function ConversationSidebar({
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="absolute right-1 top-1.5 h-9 w-9 px-0 text-muted-foreground hover:text-danger"
+                    className="absolute right-1 top-1.5 h-10 w-10 px-0 text-muted-foreground hover:text-danger"
                     aria-label={`Delete ${conversation.title || "conversation"}`}
                     onClick={() => setDeleting(conversation)}
                   >

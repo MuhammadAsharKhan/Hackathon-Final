@@ -5,6 +5,7 @@ export default function PageHeader({
   description,
   actions,
   className,
+  ...props
 }) {
   return (
     <div
@@ -12,6 +13,7 @@ export default function PageHeader({
         "flex flex-col gap-4 border-b border-border pb-6 sm:flex-row sm:items-end sm:justify-between",
         className
       )}
+      {...props}
     >
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>

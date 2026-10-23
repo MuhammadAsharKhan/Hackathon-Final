@@ -57,7 +57,7 @@ export default function MessageBubble({ message }) {
             <CopyButton
               value={message.content}
               label="Copy reply"
-              className="h-6 w-6"
+              className="h-10 w-10 sm:h-6 sm:w-6"
             />
           </div>
         )}

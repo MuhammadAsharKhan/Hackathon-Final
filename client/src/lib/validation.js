@@ -1,6 +1,6 @@
 export const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export const PASSWORD_HINT = "8 to 72 characters, with a letter and a number.";
+export const PASSWORD_HINT = "8 to 72 bytes, with a letter and a number.";
 
 export const GENDER_OPTIONS = [
   { value: "male", label: "Male" },

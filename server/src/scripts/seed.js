@@ -12,11 +12,12 @@ const seed = async () => {
   const existing = await User.findOne({ email });
 
   if (existing) {
-    if (existing.role === "admin") {
+    if (existing.role === "admin" && existing.emailVerified) {
       console.log(`Admin already exists: ${email}`);
       return;
     }
     existing.role = "admin";
+    existing.emailVerified = true;
     await existing.save();
     console.log(`Promoted to admin: ${email}`);
     return;
@@ -27,6 +28,7 @@ const seed = async () => {
     email,
     password: config.adminPassword,
     role: "admin",
+    emailVerified: true,
   });
   console.log(`Admin created: ${email}`);
 };

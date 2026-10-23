@@ -14,7 +14,12 @@ import ApiError from "./utils/ApiError.js";
 
 const app = express();
 
-app.set("trust proxy", 1);
+const isAllowedOrigin = (origin) =>
+  !origin || config.allowedOrigins.includes(origin);
+
+// The hops between the client and this process decide which address the rate
+// limiters see. One hop fits Railway, two fit a Vercel rewrite in front of it.
+app.set("trust proxy", config.trustProxyHops);
 
 app.use(helmet());
 app.use(compression());
@@ -22,9 +27,7 @@ app.use(compression());
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || config.allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
+      if (isAllowedOrigin(origin)) return callback(null, true);
       return callback(new ApiError(403, "Origin not allowed"));
     },
     credentials: true,

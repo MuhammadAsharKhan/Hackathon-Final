@@ -1,25 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import {
-  FlaskConical,
-  KeyRound,
-  Plus,
-  Power,
-  Trash2,
-} from "lucide-react";
 import toast from "react-hot-toast";
+import AdminKeysTable from "@/components/ai/AdminKeysTable";
+import AiSettingsForm from "@/components/ai/AiSettingsForm";
 import KeyFormModal from "@/components/ai/KeyFormModal";
-import KeyStatusBadge from "@/components/ai/KeyStatusBadge";
-import Button from "@/components/ui/Button";
-import Card from "@/components/ui/Card";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import EmptyState from "@/components/ui/EmptyState";
 import ErrorState from "@/components/ui/ErrorState";
-import FormError from "@/components/ui/FormError";
-import Input from "@/components/ui/Input";
 import PageHeader from "@/components/ui/PageHeader";
-import Select from "@/components/ui/Select";
-import { Table, TableCell, TableRow } from "@/components/ui/Table";
-import Textarea from "@/components/ui/Textarea";
 import {
   deleteAiKey,
   getAiSettings,
@@ -29,21 +15,11 @@ import {
   updateAiSettings,
 } from "@/api/ai.api";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { useMountedRef } from "@/hooks/useMountedRef";
 import { providerLabel } from "@/lib/ai";
-import { cn } from "@/lib/cn";
 import { getErrorMessage, getFieldErrors } from "@/lib/errors";
 
-const COLUMNS = [
-  "Provider",
-  "Label",
-  "Key",
-  "Status",
-  "Uses",
-  "Last error",
-  "Actions",
-];
-
-const toForm = (settings) => ({
+const toSettingsForm = (settings) => ({
   defaultProvider: settings.defaultProvider,
   geminiModel: settings.geminiModel,
   geminiBaseUrl: settings.geminiBaseUrl,
@@ -55,24 +31,25 @@ const toForm = (settings) => ({
 export default function AdminAi() {
   useDocumentTitle("AI settings");
 
-  const [keys, setKeys] = useState([]);
-  const [form, setForm] = useState(null);
+  const [keyRecords, setKeyRecords] = useState([]);
+  const [settingsForm, setSettingsForm] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [now, setNow] = useState(Date.now());
+  const mountedRef = useMountedRef();
 
   const [addOpen, setAddOpen] = useState(false);
   const [replacing, setReplacing] = useState(null);
   const [deleting, setDeleting] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
-  const [busyId, setBusyId] = useState("");
-  const [testResults, setTestResults] = useState({});
+  const [busyKeyId, setBusyKeyId] = useState("");
+  const [keyTestResults, setKeyTestResults] = useState({});
 
   const [settingsErrors, setSettingsErrors] = useState({});
   const [settingsError, setSettingsError] = useState("");
   const [savingSettings, setSavingSettings] = useState(false);
 
-  const load = useCallback(async () => {
+  const loadAdminData = useCallback(async () => {
     setLoading(true);
     setLoadError("");
 
@@ -81,101 +58,131 @@ export default function AdminAi() {
         listAiKeys(),
         getAiSettings(),
       ]);
-      setKeys(keyData.keys);
-      setForm(toForm(settingsData.settings));
+      if (!mountedRef.current) return;
+      setKeyRecords(keyData.keys);
+      setSettingsForm(toSettingsForm(settingsData.settings));
     } catch (error) {
+      if (!mountedRef.current) return;
       setLoadError(getErrorMessage(error));
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
-  }, []);
+  }, [mountedRef]);
 
-  const refreshKeys = useCallback(async () => {
-    const data = await listAiKeys();
-    setKeys(data.keys);
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
+  const reloadKeys = useCallback(async () => {
+    const keyData = await listAiKeys();
+    if (mountedRef.current) setKeyRecords(keyData.keys);
+  }, [mountedRef]);
 
   useEffect(() => {
-    const cooling = keys.some(
-      (key) => key.cooldownUntil && new Date(key.cooldownUntil).getTime() > Date.now()
+    loadAdminData();
+  }, [loadAdminData]);
+
+  useEffect(() => {
+    const hasCoolingKey = keyRecords.some(
+      (keyRecord) =>
+        keyRecord.cooldownUntil &&
+        new Date(keyRecord.cooldownUntil).getTime() > Date.now()
     );
-    if (!cooling) return;
+    if (!hasCoolingKey) return;
 
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
-  }, [keys]);
+  }, [keyRecords]);
 
-  const updateForm = (field) => (event) => {
+  const changeSettingsField = (field) => (event) => {
     const { value } = event.target;
-    setForm((previous) => ({ ...previous, [field]: value }));
-    setSettingsErrors((previous) => ({ ...previous, [field]: undefined }));
+    setSettingsForm((previous) => ({ ...previous, [field]: value }));
+    setSettingsErrors((previous) => ({
+      ...previous,
+      [field]: undefined,
+    }));
   };
 
-  const handleToggle = async (record) => {
-    setBusyId(record.id);
+  const handleToggle = async (keyRecord) => {
+    if (busyKeyId) return;
+    setBusyKeyId(keyRecord.id);
 
     try {
-      const data = await updateAiKey(record.id, { enabled: !record.enabled });
-      setKeys((previous) =>
-        previous.map((entry) => (entry.id === data.key.id ? data.key : entry))
+      const keyData = await updateAiKey(keyRecord.id, {
+        enabled: !keyRecord.enabled,
+      });
+      if (!mountedRef.current) return;
+
+      setKeyRecords((previous) =>
+        previous.map((keyRecord) =>
+          keyRecord.id === keyData.key.id ? keyData.key : keyRecord
+        )
       );
-      toast.success(data.key.enabled ? "Key enabled" : "Key disabled");
+      toast.success(keyData.key.enabled ? "Key enabled" : "Key disabled");
     } catch (error) {
+      if (!mountedRef.current) return;
       toast.error(getErrorMessage(error));
     } finally {
-      setBusyId("");
+      if (mountedRef.current) setBusyKeyId("");
     }
   };
 
-  const handleTest = async (record) => {
-    setBusyId(record.id);
-    setTestResults((previous) => ({ ...previous, [record.id]: null }));
+  const handleTest = async (keyRecord) => {
+    if (busyKeyId) return;
+    setBusyKeyId(keyRecord.id);
+    setKeyTestResults((previous) => ({
+      ...previous,
+      [keyRecord.id]: null,
+    }));
 
     try {
-      const data = await testAiKey(record.id);
-      setTestResults((previous) => ({ ...previous, [record.id]: data }));
-      await refreshKeys();
-    } catch (error) {
-      setTestResults((previous) => ({
+      const testResult = await testAiKey(keyRecord.id);
+      if (!mountedRef.current) return;
+
+      setKeyTestResults((previous) => ({
         ...previous,
-        [record.id]: { ok: false, error: getErrorMessage(error) },
+        [keyRecord.id]: testResult,
+      }));
+      await reloadKeys();
+    } catch (error) {
+      if (!mountedRef.current) return;
+      setKeyTestResults((previous) => ({
+        ...previous,
+        [keyRecord.id]: { ok: false, error: getErrorMessage(error) },
       }));
     } finally {
-      setBusyId("");
+      if (mountedRef.current) setBusyKeyId("");
     }
   };
 
   const handleDelete = async () => {
-    if (!deleting) return;
+    if (!deleting || deleteLoading) return;
 
     setDeleteLoading(true);
 
     try {
       await deleteAiKey(deleting.id);
-      setKeys((previous) =>
-        previous.filter((entry) => entry.id !== deleting.id)
+      if (!mountedRef.current) return;
+
+      setKeyRecords((previous) =>
+        previous.filter((keyRecord) => keyRecord.id !== deleting.id)
       );
       setDeleting(null);
       toast.success("Key deleted");
     } catch (error) {
+      if (!mountedRef.current) return;
       toast.error(getErrorMessage(error));
     } finally {
-      setDeleteLoading(false);
+      if (mountedRef.current) setDeleteLoading(false);
     }
   };
 
-  const handleSaved = (savedKey) => {
+  const handleKeySaved = (savedKey) => {
     const wasReplace = Boolean(replacing);
 
-    setKeys((previous) => {
-      const exists = previous.some((entry) => entry.id === savedKey.id);
-      if (exists) {
-        return previous.map((entry) =>
-          entry.id === savedKey.id ? savedKey : entry
+    setKeyRecords((previous) => {
+      const keyExists = previous.some(
+        (keyRecord) => keyRecord.id === savedKey.id
+      );
+      if (keyExists) {
+        return previous.map((keyRecord) =>
+          keyRecord.id === savedKey.id ? savedKey : keyRecord
         );
       }
       return [...previous, savedKey];
@@ -188,13 +195,24 @@ export default function AdminAi() {
 
   const handleSettingsSubmit = async (event) => {
     event.preventDefault();
-    const nextErrors = {};
+    if (savingSettings) return;
 
-    if (!form.systemPrompt.trim()) nextErrors.systemPrompt = "System prompt is required";
-    if (!form.geminiModel.trim()) nextErrors.geminiModel = "Model is required";
-    if (!form.grokModel.trim()) nextErrors.grokModel = "Model is required";
-    if (!form.geminiBaseUrl.trim()) nextErrors.geminiBaseUrl = "Base URL is required";
-    if (!form.grokBaseUrl.trim()) nextErrors.grokBaseUrl = "Base URL is required";
+    const nextErrors = {};
+    if (!settingsForm.systemPrompt.trim()) {
+      nextErrors.systemPrompt = "System prompt is required";
+    }
+    if (!settingsForm.geminiModel.trim()) {
+      nextErrors.geminiModel = "Model is required";
+    }
+    if (!settingsForm.grokModel.trim()) {
+      nextErrors.grokModel = "Model is required";
+    }
+    if (!settingsForm.geminiBaseUrl.trim()) {
+      nextErrors.geminiBaseUrl = "Base URL is required";
+    }
+    if (!settingsForm.grokBaseUrl.trim()) {
+      nextErrors.grokBaseUrl = "Base URL is required";
+    }
 
     setSettingsErrors(nextErrors);
     setSettingsError("");
@@ -203,14 +221,26 @@ export default function AdminAi() {
     setSavingSettings(true);
 
     try {
-      const data = await updateAiSettings(form);
-      setForm(toForm(data.settings));
+      const settingsData = await updateAiSettings({
+        defaultProvider: settingsForm.defaultProvider,
+        geminiModel: settingsForm.geminiModel.trim(),
+        geminiBaseUrl: settingsForm.geminiBaseUrl.trim(),
+        grokModel: settingsForm.grokModel.trim(),
+        grokBaseUrl: settingsForm.grokBaseUrl.trim(),
+        systemPrompt: settingsForm.systemPrompt.trim(),
+      });
+      if (!mountedRef.current) return;
+
+      setSettingsForm(toSettingsForm(settingsData.settings));
+      setSettingsErrors({});
+      setSettingsError("");
       toast.success("Settings saved");
     } catch (error) {
+      if (!mountedRef.current) return;
       setSettingsErrors(getFieldErrors(error));
       setSettingsError(getErrorMessage(error));
     } finally {
-      setSavingSettings(false);
+      if (mountedRef.current) setSavingSettings(false);
     }
   };
 
@@ -224,13 +254,13 @@ export default function AdminAi() {
         <ErrorState
           title="AI settings did not load"
           message={loadError}
-          onRetry={load}
+          onRetry={loadAdminData}
         />
       </div>
     );
   }
 
-  if (loading || !form) {
+  if (loading || !settingsForm) {
     return (
       <div className="space-y-6">
         <PageHeader
@@ -253,195 +283,32 @@ export default function AdminAi() {
         description="Provider keys, models and the system prompt used by AI Buddy."
       />
 
-      <section className="space-y-4">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-sm font-medium">Provider keys</h2>
-          <Button onClick={() => setAddOpen(true)}>
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            Add key
-          </Button>
-        </div>
+      <AdminKeysTable
+        keys={keyRecords}
+        busyKeyId={busyKeyId}
+        keyTestResults={keyTestResults}
+        now={now}
+        onAdd={() => setAddOpen(true)}
+        onTest={handleTest}
+        onReplace={setReplacing}
+        onToggle={handleToggle}
+        onDelete={setDeleting}
+      />
 
-        {keys.length === 0 ? (
-          <EmptyState
-            icon={KeyRound}
-            title="No keys yet"
-            description="Add a provider key so AI Buddy can answer."
-          />
-        ) : (
-          <Table columns={COLUMNS}>
-            {keys.map((record) => {
-              const result = testResults[record.id];
-
-              return (
-                <TableRow key={record.id}>
-                  <TableCell className="font-medium">
-                    {providerLabel(record.provider)}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {record.label || "-"}
-                  </TableCell>
-                  <TableCell>
-                    <span className="font-mono text-xs">
-                      {record.maskedKey}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <KeyStatusBadge keyRecord={record} now={now} />
-                  </TableCell>
-                  <TableCell className="tabular-nums text-muted-foreground">
-                    {record.usageCount}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    <span
-                      className="block max-w-[12rem] truncate text-xs"
-                      title={record.lastError || undefined}
-                    >
-                      {record.lastError || "-"}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-0.5">
-                      <Button
-                        variant="ghost"
-                        className="h-9 w-9 px-0 text-muted-foreground hover:text-foreground"
-                        aria-label={`Test ${record.label || "key"}`}
-                        title="Test key"
-                        onClick={() => handleTest(record)}
-                        disabled={busyId === record.id}
-                      >
-                        <FlaskConical className="h-4 w-4" aria-hidden="true" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        className="h-9 w-9 px-0 text-muted-foreground hover:text-foreground"
-                        aria-label={`Replace ${record.label || "key"}`}
-                        title="Replace key"
-                        onClick={() => setReplacing(record)}
-                        disabled={busyId === record.id}
-                      >
-                        <KeyRound className="h-4 w-4" aria-hidden="true" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        className="h-9 w-9 px-0 text-muted-foreground hover:text-foreground"
-                        aria-label={
-                          record.enabled
-                            ? `Disable ${record.label || "key"}`
-                            : `Enable ${record.label || "key"}`
-                        }
-                        title={record.enabled ? "Disable key" : "Enable key"}
-                        onClick={() => handleToggle(record)}
-                        disabled={busyId === record.id}
-                      >
-                        <Power className="h-4 w-4" aria-hidden="true" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        className="h-9 w-9 px-0 text-muted-foreground hover:text-danger"
-                        aria-label={`Delete ${record.label || "key"}`}
-                        title="Delete key"
-                        onClick={() => setDeleting(record)}
-                        disabled={busyId === record.id}
-                      >
-                        <Trash2 className="h-4 w-4" aria-hidden="true" />
-                      </Button>
-                    </div>
-
-                    {busyId === record.id ? (
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Working
-                      </p>
-                    ) : null}
-
-                    {result ? (
-                      <p
-                        className={cn(
-                          "mt-1 max-w-[14rem] truncate text-xs",
-                          result.ok ? "text-success" : "text-danger"
-                        )}
-                        title={result.ok ? result.reply : result.error}
-                      >
-                        {result.ok ? `Reply: ${result.reply}` : result.error}
-                      </p>
-                    ) : null}
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </Table>
-        )}
-
-        <p className="text-xs text-muted-foreground">
-          All grok keys must come from the same vendor. A replacement key
-          resets its status and cooldown.
-        </p>
-      </section>
-
-      <section className="space-y-4">
-        <h2 className="text-sm font-medium">Settings</h2>
-
-        <Card className="p-6">
-          <form className="space-y-4" onSubmit={handleSettingsSubmit} noValidate>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Select
-                label="Default provider"
-                value={form.defaultProvider}
-                onChange={updateForm("defaultProvider")}
-                error={settingsErrors.defaultProvider}
-              >
-                <option value="gemini">Gemini</option>
-                <option value="grok">Grok</option>
-              </Select>
-              <div />
-              <Input
-                label="Gemini model"
-                value={form.geminiModel}
-                onChange={updateForm("geminiModel")}
-                error={settingsErrors.geminiModel}
-              />
-              <Input
-                label="Gemini base URL"
-                value={form.geminiBaseUrl}
-                onChange={updateForm("geminiBaseUrl")}
-                error={settingsErrors.geminiBaseUrl}
-              />
-              <Input
-                label="Grok model"
-                value={form.grokModel}
-                onChange={updateForm("grokModel")}
-                error={settingsErrors.grokModel}
-              />
-              <Input
-                label="Grok base URL"
-                value={form.grokBaseUrl}
-                onChange={updateForm("grokBaseUrl")}
-                error={settingsErrors.grokBaseUrl}
-              />
-            </div>
-
-            <Textarea
-              label="System prompt"
-              rows={5}
-              value={form.systemPrompt}
-              onChange={updateForm("systemPrompt")}
-              error={settingsErrors.systemPrompt}
-            />
-
-            <FormError>{settingsError}</FormError>
-
-            <Button type="submit" loading={savingSettings}>
-              Save settings
-            </Button>
-          </form>
-        </Card>
-      </section>
+      <AiSettingsForm
+        form={settingsForm}
+        errors={settingsErrors}
+        formError={settingsError}
+        saving={savingSettings}
+        onChange={changeSettingsField}
+        onSubmit={handleSettingsSubmit}
+      />
 
       <KeyFormModal
         open={addOpen}
         mode="create"
         onClose={() => setAddOpen(false)}
-        onSaved={handleSaved}
+        onSaved={handleKeySaved}
       />
 
       <KeyFormModal
@@ -449,7 +316,7 @@ export default function AdminAi() {
         mode="replace"
         keyRecord={replacing}
         onClose={() => setReplacing(null)}
-        onSaved={handleSaved}
+        onSaved={handleKeySaved}
       />
 
       <ConfirmDialog
@@ -461,7 +328,9 @@ export default function AdminAi() {
         title="Delete key"
         description={
           deleting
-            ? `The ${deleting.label || providerLabel(deleting.provider)} key will stop being used.`
+            ? `The ${
+                deleting.label || providerLabel(deleting.provider)
+              } key will stop being used.`
             : undefined
         }
         loading={deleteLoading}

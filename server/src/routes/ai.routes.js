@@ -10,7 +10,7 @@ import {
   deleteAiKey,
   getAiSettings,
   listAiKeys,
-  testAiKeyById,
+  testStoredAiKey,
   updateAiKey,
   updateAiSettings,
 } from "../controllers/aiAdmin.controller.js";
@@ -61,7 +61,7 @@ router.delete(
 router.post(
   "/admin/ai/keys/:id/test",
   validate(aiKeyIdSchema, "params"),
-  testAiKeyById
+  testStoredAiKey
 );
 router.get("/admin/ai/settings", getAiSettings);
 router.put(

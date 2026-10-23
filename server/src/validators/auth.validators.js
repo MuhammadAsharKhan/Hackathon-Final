@@ -49,11 +49,18 @@ export const loginSchema = z.object({
   password: z
     .string()
     .min(1, "Password is required")
-    .max(72, "Password must be at most 72 characters"),
+    .max(72, "Password must be at most 72 characters")
+    .refine((value) => Buffer.byteLength(value, "utf8") <= 72, {
+      message: "Password must be at most 72 bytes",
+    }),
 });
 
 export const googleSignInSchema = z.object({
   credential: z.string().min(20, "Google credential is required"),
+});
+
+export const facebookSignInSchema = z.object({
+  accessToken: z.string().min(20, "Facebook access token is required"),
 });
 
 export const forgotPasswordSchema = z.object({
@@ -63,6 +70,15 @@ export const forgotPasswordSchema = z.object({
 export const verifyOtpSchema = z.object({
   email: emailSchema,
   otp: z.string().min(1, "Code is required").max(10, "Invalid code"),
+});
+
+export const verifyEmailSchema = z.object({
+  email: emailSchema,
+  otp: z.string().min(1, "Code is required").max(10, "Invalid code"),
+});
+
+export const resendVerificationSchema = z.object({
+  email: emailSchema,
 });
 
 export const resetPasswordSchema = z.object({

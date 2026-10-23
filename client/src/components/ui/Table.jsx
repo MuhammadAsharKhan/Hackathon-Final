@@ -1,12 +1,13 @@
 import { cn } from "@/lib/cn";
 
-export function Table({ columns, className, children }) {
+export function Table({ columns, className, children, ...props }) {
   return (
     <div
       className={cn(
         "overflow-x-auto rounded-xl border border-border",
         className
       )}
+      {...props}
     >
       <table className="w-full min-w-[38rem] border-collapse text-left text-sm">
         <thead>

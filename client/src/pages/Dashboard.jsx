@@ -1,33 +1,48 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  Inbox,
-  Pencil,
-  Plus,
-  Search,
-  Trash2,
-} from "lucide-react";
+import { Inbox, Plus, Search } from "lucide-react";
 import toast from "react-hot-toast";
-import Badge, { STATUS_LABELS } from "@/components/ui/Badge";
+import { STATUS_LABELS } from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
+import Card from "@/components/ui/Card";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import CopyButton from "@/components/ui/CopyButton";
 import EmptyState from "@/components/ui/EmptyState";
 import ErrorState from "@/components/ui/ErrorState";
-import FormError from "@/components/ui/FormError";
 import Input from "@/components/ui/Input";
-import Modal from "@/components/ui/Modal";
 import PageHeader from "@/components/ui/PageHeader";
 import Pagination from "@/components/ui/Pagination";
 import Select from "@/components/ui/Select";
-import Textarea from "@/components/ui/Textarea";
+import ItemFormModal from "@/components/items/ItemFormModal";
+import ItemRow from "@/components/items/ItemRow";
 import { createItem, deleteItem, listItems, updateItem } from "@/api/items.api";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { useMountedRef } from "@/hooks/useMountedRef";
 import { getErrorMessage, getFieldErrors } from "@/lib/errors";
-import { formatDate } from "@/lib/format";
+import { scrollToElement } from "@/lib/scroll";
 
 const PAGE_SIZE = 10;
 const EMPTY_FORM = { title: "", description: "", status: "todo" };
+
+const readItemInput = (form) => ({
+  title: form.title.trim(),
+  description: form.description.trim(),
+  status: form.status,
+});
+
+const validateItemInput = ({ title, description }) => {
+  const errors = {};
+
+  if (!title) errors.title = "Title is required";
+  else if (title.length > 120) {
+    errors.title = "Title must be 120 characters or fewer";
+  }
+
+  if (description.length > 2000) {
+    errors.description = "Description must be 2000 characters or fewer";
+  }
+
+  return errors;
+};
 
 export default function Dashboard() {
   useDocumentTitle("Dashboard");
@@ -42,12 +57,13 @@ export default function Dashboard() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
-  const [refreshKey, setRefreshKey] = useState(0);
+  const [reloadToken, setReloadToken] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const debouncedSearch = useDebounce(search, 400);
-  const listRef = useRef(null);
+  const listTopRef = useRef(null);
 
+  const mountedRef = useMountedRef();
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -69,10 +85,10 @@ export default function Dashboard() {
       search: debouncedSearch.trim() || undefined,
       status: status || undefined,
     })
-      .then((payload) => {
+      .then((itemsData) => {
         if (cancelled) return;
-        setItems(payload.items);
-        setPagination(payload.pagination);
+        setItems(itemsData.items);
+        setPagination(itemsData.pagination);
       })
       .catch((requestError) => {
         if (cancelled) return;
@@ -86,11 +102,11 @@ export default function Dashboard() {
     return () => {
       cancelled = true;
     };
-  }, [page, debouncedSearch, status, refreshKey]);
+  }, [page, debouncedSearch, status, reloadToken]);
 
   const filtersActive = Boolean(debouncedSearch.trim() || status);
 
-  const updateForm = (field) => (event) => {
+  const changeFormField = (field) => (event) => {
     const { value } = event.target;
     setForm((previous) => ({ ...previous, [field]: value }));
     setFormErrors((previous) => ({ ...previous, [field]: undefined }));
@@ -128,75 +144,65 @@ export default function Dashboard() {
 
   const handlePageChange = (nextPage) => {
     setPage(nextPage);
-    listRef.current?.scrollIntoView({
-      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-        ? "auto"
-        : "smooth",
-      block: "start",
-    });
+    scrollToElement(listTopRef.current);
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    if (saving) return;
     setFormError("");
 
-    const title = form.title.trim();
-    const description = form.description.trim();
-    const nextErrors = {};
-
-    if (!title) nextErrors.title = "Title is required";
-    else if (title.length > 120)
-      nextErrors.title = "Title must be 120 characters or fewer";
-
-    if (description.length > 2000)
-      nextErrors.description = "Description must be 2000 characters or fewer";
-
+    const itemInput = readItemInput(form);
+    const nextErrors = validateItemInput(itemInput);
     setFormErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
 
     setSaving(true);
 
     try {
-      const payload = { title, description, status: form.status };
-
       if (editing) {
-        await updateItem(editing.id, payload);
+        await updateItem(editing.id, itemInput);
         toast.success("Item updated");
       } else {
-        await createItem(payload);
+        await createItem(itemInput);
         toast.success("Item created");
         setPage(1);
       }
 
+      if (!mountedRef.current) return;
       setFormOpen(false);
       resetForm();
-      setRefreshKey((key) => key + 1);
+      setReloadToken((token) => token + 1);
     } catch (requestError) {
+      if (!mountedRef.current) return;
       setFormErrors(getFieldErrors(requestError));
       setFormError(getErrorMessage(requestError));
       toast.error(getErrorMessage(requestError));
     } finally {
-      setSaving(false);
+      if (mountedRef.current) setSaving(false);
     }
   };
 
   const handleDelete = async () => {
-    if (!deleting) return;
+    if (!deleting || deleteLoading) return;
     setDeleteLoading(true);
 
     try {
       await deleteItem(deleting.id);
+      if (!mountedRef.current) return;
       toast.success("Item deleted");
       setDeleting(null);
+
       if (items.length === 1 && page > 1) {
         setPage(page - 1);
       } else {
-        setRefreshKey((key) => key + 1);
+        setReloadToken((token) => token + 1);
       }
     } catch (requestError) {
+      if (!mountedRef.current) return;
       toast.error(getErrorMessage(requestError));
     } finally {
-      setDeleteLoading(false);
+      if (mountedRef.current) setDeleteLoading(false);
     }
   };
 
@@ -210,7 +216,7 @@ export default function Dashboard() {
     <div className="space-y-6">
       <PageHeader
         title="Items"
-        description="A working CRUD flow with search, filters and owner scoping."
+        description="Create, search, filter and edit your items."
         actions={
           <Button onClick={openCreate}>
             <Plus className="h-4 w-4" aria-hidden="true" />
@@ -255,25 +261,22 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div ref={listRef} className="scroll-mt-20">
+      <div ref={listTopRef} className="scroll-mt-20">
         {loading ? (
           <div className="space-y-3" aria-hidden="true">
             {Array.from({ length: 4 }).map((_, index) => (
-              <div
-                key={index}
-                className="rounded-xl border border-border p-5"
-              >
+              <Card key={index} className="p-5">
                 <div className="skeleton h-4 w-1/3" />
                 <div className="skeleton mt-3 h-3 w-2/3" />
                 <div className="skeleton mt-2 h-3 w-24" />
-              </div>
+              </Card>
             ))}
           </div>
         ) : error ? (
           <ErrorState
             title="Items did not load"
             message={error}
-            onRetry={() => setRefreshKey((key) => key + 1)}
+            onRetry={() => setReloadToken((token) => token + 1)}
           />
         ) : items.length === 0 ? (
           <EmptyState
@@ -298,57 +301,16 @@ export default function Dashboard() {
             }
           />
         ) : (
-          <div className="overflow-hidden rounded-xl border border-border">
+          <Card className="overflow-hidden">
             {items.map((item) => (
-              <div
+              <ItemRow
                 key={item.id}
-                className="flex flex-col gap-3 border-b border-border p-5 last:border-b-0 sm:flex-row sm:items-start sm:justify-between"
-              >
-                <div className="min-w-0 space-y-1.5">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="truncate text-sm font-medium">{item.title}</h2>
-                    <Badge status={item.status} />
-                  </div>
-                  {item.description ? (
-                    <p className="line-clamp-2 text-sm text-muted-foreground">
-                      {item.description}
-                    </p>
-                  ) : null}
-                  <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <span>Updated {formatDate(item.updatedAt)}</span>
-                    <span aria-hidden="true">/</span>
-                    <span className="tabular-nums">UID {item.uid}</span>
-                    <CopyButton
-                      value={item.uid}
-                      label={`Copy uid for ${item.title}`}
-                      className="h-6 w-6"
-                    />
-                  </p>
-                </div>
-
-                <div className="flex shrink-0 items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => openEdit(item)}
-                    aria-label={`Edit ${item.title}`}
-                    className="h-10 w-10 px-0 text-muted-foreground hover:text-foreground sm:h-8 sm:w-8"
-                  >
-                    <Pencil className="h-4 w-4" aria-hidden="true" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setDeleting(item)}
-                    aria-label={`Delete ${item.title}`}
-                    className="h-10 w-10 px-0 text-muted-foreground hover:text-danger sm:h-8 sm:w-8"
-                  >
-                    <Trash2 className="h-4 w-4" aria-hidden="true" />
-                  </Button>
-                </div>
-              </div>
+                item={item}
+                onEdit={openEdit}
+                onDelete={setDeleting}
+              />
             ))}
-          </div>
+          </Card>
         )}
       </div>
 
@@ -361,66 +323,17 @@ export default function Dashboard() {
         />
       ) : null}
 
-      <Modal
+      <ItemFormModal
         open={formOpen}
+        editing={editing}
+        form={form}
+        errors={formErrors}
+        formError={formError}
+        saving={saving}
+        onChange={changeFormField}
         onClose={closeForm}
-        title={editing ? "Edit item" : "New item"}
-        description={
-          editing
-            ? "Change the details, then save."
-            : "Add a title, then set the status as work moves."
-        }
-        footer={
-          <>
-            <Button
-              variant="secondary"
-              onClick={closeForm}
-              disabled={saving}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" form="item-form" loading={saving}>
-              Save
-            </Button>
-          </>
-        }
-      >
-        <form
-          id="item-form"
-          className="space-y-4"
-          onSubmit={handleSubmit}
-          noValidate
-        >
-          <Input
-            label="Title"
-            value={form.title}
-            onChange={updateForm("title")}
-            error={formErrors.title}
-            maxLength={120}
-            autoComplete="off"
-          />
-          <Textarea
-            label="Description"
-            value={form.description}
-            onChange={updateForm("description")}
-            error={formErrors.description}
-            hint="Optional. Up to 2000 characters."
-            maxLength={2000}
-          />
-          <Select
-            label="Status"
-            value={form.status}
-            onChange={updateForm("status")}
-            error={formErrors.status}
-          >
-            <option value="todo">{STATUS_LABELS.todo}</option>
-            <option value="in_progress">{STATUS_LABELS.in_progress}</option>
-            <option value="done">{STATUS_LABELS.done}</option>
-          </Select>
-
-          <FormError>{formError}</FormError>
-        </form>
-      </Modal>
+        onSubmit={handleSubmit}
+      />
 
       <ConfirmDialog
         open={Boolean(deleting)}

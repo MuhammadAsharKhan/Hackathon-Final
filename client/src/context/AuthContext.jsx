@@ -8,15 +8,21 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const startSession = useCallback((session) => {
+    setToken(session.accessToken);
+    setUser(session.user);
+    return session.user;
+  }, []);
+
   useEffect(() => {
     let active = true;
 
+    // A full page load restores the session from the httpOnly refresh cookie.
     const bootstrap = async () => {
       try {
         const session = await authApi.refresh();
         if (!active) return;
-        setToken(session.accessToken);
-        setUser(session.user);
+        startSession(session);
       } catch {
         if (!active) return;
         clearToken();
@@ -39,28 +45,49 @@ export function AuthProvider({ children }) {
       active = false;
       window.removeEventListener("auth:logout", handleLogout);
     };
-  }, []);
+  }, [startSession]);
 
-  const login = useCallback(async (credentials) => {
-    const session = await authApi.login(credentials);
-    setToken(session.accessToken);
-    setUser(session.user);
-    return session.user;
-  }, []);
+  const login = useCallback(
+    async (credentials) => {
+      const session = await authApi.login(credentials);
+      return startSession(session);
+    },
+    [startSession]
+  );
 
-  const register = useCallback(async (payload) => {
-    const session = await authApi.register(payload);
-    setToken(session.accessToken);
-    setUser(session.user);
-    return session.user;
-  }, []);
+  // Registration may answer with a session or ask for an emailed code.
+  const register = useCallback(
+    async (account) => {
+      const result = await authApi.register(account);
+      if (result.accessToken) startSession(result);
+      return result;
+    },
+    [startSession]
+  );
 
-  const loginWithGoogle = useCallback(async (credential) => {
-    const session = await authApi.signInWithGoogle(credential);
-    setToken(session.accessToken);
-    setUser(session.user);
-    return session.user;
-  }, []);
+  const verifyEmail = useCallback(
+    async (verification) => {
+      const session = await authApi.verifyEmail(verification);
+      return startSession(session);
+    },
+    [startSession]
+  );
+
+  const loginWithGoogle = useCallback(
+    async (credential) => {
+      const session = await authApi.signInWithGoogle(credential);
+      return startSession(session);
+    },
+    [startSession]
+  );
+
+  const loginWithFacebook = useCallback(
+    async (accessToken) => {
+      const session = await authApi.signInWithFacebook(accessToken);
+      return startSession(session);
+    },
+    [startSession]
+  );
 
   const logout = useCallback(async () => {
     await authApi.logout().catch(() => {});
@@ -72,10 +99,32 @@ export function AuthProvider({ children }) {
     setUser(nextUser);
   }, []);
 
-  const value = useMemo(
-    () => ({ user, loading, login, register, loginWithGoogle, logout, updateUser }),
-    [user, loading, login, register, loginWithGoogle, logout, updateUser]
+  const authValue = useMemo(
+    () => ({
+      user,
+      loading,
+      login,
+      register,
+      verifyEmail,
+      loginWithGoogle,
+      loginWithFacebook,
+      logout,
+      updateUser,
+    }),
+    [
+      user,
+      loading,
+      login,
+      register,
+      verifyEmail,
+      loginWithGoogle,
+      loginWithFacebook,
+      logout,
+      updateUser,
+    ]
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={authValue}>{children}</AuthContext.Provider>
+  );
 }

@@ -4,17 +4,20 @@ import { GoogleLogin } from "@react-oauth/google";
 import toast from "react-hot-toast";
 import { googleClientId } from "@/config/google";
 import { useAuth } from "@/hooks/useAuth";
+import { useMountedRef } from "@/hooks/useMountedRef";
 import { getErrorMessage } from "@/lib/errors";
+import { redirectPath } from "@/lib/navigation";
 
 export default function GoogleButton({ onSignedIn }) {
   const { loginWithGoogle } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [pending, setPending] = useState(false);
+  const mountedRef = useMountedRef();
 
   if (!googleClientId) return null;
 
-  const from = location.state?.from?.pathname || "/dashboard";
+  const from = redirectPath(location);
 
   const handleSuccess = async (response) => {
     if (!response?.credential) {
@@ -26,13 +29,15 @@ export default function GoogleButton({ onSignedIn }) {
 
     try {
       await loginWithGoogle(response.credential);
+      if (!mountedRef.current) return;
       toast.success("Signed in");
       if (onSignedIn) onSignedIn();
       else navigate(from, { replace: true });
     } catch (error) {
+      if (!mountedRef.current) return;
       toast.error(getErrorMessage(error));
     } finally {
-      setPending(false);
+      if (mountedRef.current) setPending(false);
     }
   };
 

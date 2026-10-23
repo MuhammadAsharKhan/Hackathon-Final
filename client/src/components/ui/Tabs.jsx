@@ -10,6 +10,7 @@ export default function Tabs({
   idPrefix = "tabs",
   label = "Sections",
   className,
+  ...props
 }) {
   const handleKeyDown = (event, index) => {
     if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
@@ -28,6 +29,7 @@ export default function Tabs({
       role="tablist"
       aria-label={label}
       className={cn("flex gap-1 border-b border-border", className)}
+      {...props}
     >
       {tabs.map((tab, index) => {
         const active = tab.id === value;

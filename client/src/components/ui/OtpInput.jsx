@@ -10,60 +10,69 @@ export default function OtpInput({
   disabled = false,
   error = false,
   className,
+  ...props
 }) {
   const [digits, setDigits] = useState(emptyDigits);
   const inputsRef = useRef([]);
 
   useEffect(() => {
-    if (value === "" && digits.some(Boolean)) setDigits(emptyDigits());
+    if (value !== "" || !digits.some(Boolean)) return;
+
+    setDigits(emptyDigits());
+    inputsRef.current[0]?.focus();
   }, [value]);
 
-  const publish = (next) => {
-    setDigits(next);
-    onChange(next.join(""));
+  const publishDigits = (nextDigits) => {
+    setDigits(nextDigits);
+    onChange(nextDigits.join(""));
   };
 
-  const fill = (startIndex, text) => {
-    const numbers = text.replace(/\D/g, "").slice(0, LENGTH - startIndex);
-    if (!numbers) return;
+  const fillDigits = (startIndex, text) => {
+    const numericText = text
+      .replace(/\D/g, "")
+      .slice(0, LENGTH - startIndex);
+    if (!numericText) return;
 
-    const next = [...digits];
-    numbers.split("").forEach((digit, offset) => {
-      next[startIndex + offset] = digit;
+    const nextDigits = [...digits];
+    numericText.split("").forEach((digit, offset) => {
+      nextDigits[startIndex + offset] = digit;
     });
-    publish(next);
+    publishDigits(nextDigits);
 
-    const lastIndex = Math.min(startIndex + numbers.length, LENGTH - 1);
+    const lastIndex = Math.min(
+      startIndex + numericText.length,
+      LENGTH - 1
+    );
     inputsRef.current[lastIndex]?.focus();
   };
 
-  const handleChange = (index, raw) => {
-    const numbers = raw.replace(/\D/g, "");
+  const handleDigitChange = (index, inputValue) => {
+    const numericText = inputValue.replace(/\D/g, "");
 
-    if (!numbers) {
-      const next = [...digits];
-      next[index] = "";
-      publish(next);
+    if (!numericText) {
+      const nextDigits = [...digits];
+      nextDigits[index] = "";
+      publishDigits(nextDigits);
       return;
     }
 
-    fill(index, numbers);
+    fillDigits(index, numericText);
   };
 
-  const handleKeyDown = (index, event) => {
+  const handleDigitKeyDown = (index, event) => {
     if (event.key === "Backspace") {
       event.preventDefault();
-      const next = [...digits];
+      const nextDigits = [...digits];
 
-      if (next[index]) {
-        next[index] = "";
-        publish(next);
+      if (nextDigits[index]) {
+        nextDigits[index] = "";
+        publishDigits(nextDigits);
         return;
       }
 
       if (index > 0) {
-        next[index - 1] = "";
-        publish(next);
+        nextDigits[index - 1] = "";
+        publishDigits(nextDigits);
         inputsRef.current[index - 1]?.focus();
       }
       return;
@@ -81,7 +90,7 @@ export default function OtpInput({
   };
 
   return (
-    <div className={cn("flex gap-2", className)}>
+    <div className={cn("flex gap-2", className)} {...props}>
       {digits.map((digit, index) => (
         <input
           key={index}
@@ -89,12 +98,14 @@ export default function OtpInput({
             inputsRef.current[index] = node;
           }}
           value={digit}
-          onChange={(event) => handleChange(index, event.target.value)}
-          onKeyDown={(event) => handleKeyDown(index, event)}
+          onChange={(event) =>
+            handleDigitChange(index, event.target.value)
+          }
+          onKeyDown={(event) => handleDigitKeyDown(index, event)}
           onFocus={(event) => event.target.select()}
           onPaste={(event) => {
             event.preventDefault();
-            fill(0, event.clipboardData.getData("text"));
+            fillDigits(0, event.clipboardData.getData("text"));
           }}
           type="text"
           inputMode="numeric"

@@ -2,7 +2,7 @@ import Item from "../models/Item.js";
 import ApiError from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 
-const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 export const listItems = asyncHandler(async (req, res) => {
   const { page, limit, search, status } = req.query;

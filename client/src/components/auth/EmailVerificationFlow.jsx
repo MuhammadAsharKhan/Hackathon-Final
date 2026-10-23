@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Button from "@/components/ui/Button";
 import FormError from "@/components/ui/FormError";
 import Input from "@/components/ui/Input";
 import OtpInput from "@/components/ui/OtpInput";
 import { forgotPassword, verifyOtp } from "@/api/auth.api";
+import { useMountedRef } from "@/hooks/useMountedRef";
+import { useResendCountdown } from "@/hooks/useResendCountdown";
 import { getErrorMessage } from "@/lib/errors";
 import { EMAIL_PATTERN } from "@/lib/validation";
 
@@ -21,20 +23,15 @@ export default function EmailVerificationFlow({
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
   const [verifying, setVerifying] = useState(false);
-  const [countdown, setCountdown] = useState(0);
-
-  useEffect(() => {
-    if (countdown <= 0) return;
-
-    const timer = setTimeout(() => setCountdown((value) => value - 1), 1000);
-    return () => clearTimeout(timer);
-  }, [countdown]);
+  const { countdown, restart, clear } = useResendCountdown(RESEND_SECONDS);
+  const mountedRef = useMountedRef();
 
   const sendCode = async (event) => {
     event?.preventDefault();
-    const target = email.trim().toLowerCase();
+    if (sending) return;
+    const normalizedEmail = email.trim().toLowerCase();
 
-    if (!EMAIL_PATTERN.test(target)) {
+    if (!EMAIL_PATTERN.test(normalizedEmail)) {
       setError("Enter a valid email");
       return;
     }
@@ -43,20 +40,23 @@ export default function EmailVerificationFlow({
     setError("");
 
     try {
-      await forgotPassword(target);
-      setEmail(target);
+      await forgotPassword(normalizedEmail);
+      if (!mountedRef.current) return;
+      setEmail(normalizedEmail);
       setStep("code");
       setCode("");
-      setCountdown(RESEND_SECONDS);
-    } catch (requestError) {
-      setError(getErrorMessage(requestError));
+      restart();
+    } catch (failure) {
+      if (!mountedRef.current) return;
+      setError(getErrorMessage(failure));
     } finally {
-      setSending(false);
+      if (mountedRef.current) setSending(false);
     }
   };
 
   const verify = async (event) => {
     event.preventDefault();
+    if (verifying) return;
 
     if (code.length !== 6) {
       setError("Enter the six digit code");
@@ -67,12 +67,14 @@ export default function EmailVerificationFlow({
     setError("");
 
     try {
-      const data = await verifyOtp({ email, otp: code });
-      onVerified(data.resetToken);
-    } catch (requestError) {
-      setError(getErrorMessage(requestError));
+      const verification = await verifyOtp({ email, otp: code });
+      if (!mountedRef.current) return;
+      onVerified(verification.resetToken);
+    } catch (failure) {
+      if (!mountedRef.current) return;
+      setError(getErrorMessage(failure));
     } finally {
-      setVerifying(false);
+      if (mountedRef.current) setVerifying(false);
     }
   };
 
@@ -108,8 +110,8 @@ export default function EmailVerificationFlow({
 
       <OtpInput
         value={code}
-        onChange={(next) => {
-          setCode(next);
+        onChange={(nextCode) => {
+          setCode(nextCode);
           setError("");
         }}
         disabled={verifying}
@@ -126,6 +128,7 @@ export default function EmailVerificationFlow({
         <Button
           variant="ghost"
           size="sm"
+          className="min-h-10"
           onClick={sendCode}
           disabled={countdown > 0 || sending}
           loading={sending}
@@ -136,11 +139,12 @@ export default function EmailVerificationFlow({
           <Button
             variant="ghost"
             size="sm"
+            className="min-h-10"
             onClick={() => {
               setStep("email");
               setCode("");
               setError("");
-              setCountdown(0);
+              clear();
             }}
           >
             Change email
