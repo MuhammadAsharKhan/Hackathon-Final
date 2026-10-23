@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { GoogleLogin } from "@react-oauth/google";
 import toast from "react-hot-toast";
@@ -14,6 +14,26 @@ export default function GoogleButton({ onSignedIn }) {
   const location = useLocation();
   const [pending, setPending] = useState(false);
   const mountedRef = useMountedRef();
+  const wrapperRef = useRef(null);
+  const [buttonWidth, setButtonWidth] = useState(0);
+
+  // Google draws a fixed width button. Sizing it to the card keeps the button
+  // inside a 360 px screen instead of widening the page. The first measure runs
+  // before paint, so the button is never drawn wider than the card.
+  useLayoutEffect(() => {
+    const wrapper = wrapperRef.current;
+    if (!wrapper || !googleClientId) return;
+
+    const measure = () => {
+      const width = Math.floor(wrapper.getBoundingClientRect().width);
+      if (width > 0) setButtonWidth(Math.min(400, Math.max(200, width)));
+    };
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(wrapper);
+    return () => observer.disconnect();
+  }, []);
 
   if (!googleClientId) return null;
 
@@ -43,21 +63,26 @@ export default function GoogleButton({ onSignedIn }) {
 
   return (
     <div
+      ref={wrapperRef}
       className={
         pending ? "pointer-events-none opacity-60" : undefined
       }
       aria-busy={pending || undefined}
     >
-      <GoogleLogin
-        onSuccess={handleSuccess}
-        onError={() => toast.error("Google sign-in did not complete. Try again.")}
-        theme="outline"
-        shape="rectangular"
-        size="large"
-        text="continue_with"
-        logo_alignment="left"
-        width="360"
-      />
+      {buttonWidth > 0 ? (
+        <GoogleLogin
+          onSuccess={handleSuccess}
+          onError={() =>
+            toast.error("Google sign-in did not complete. Try again.")
+          }
+          theme="outline"
+          shape="rectangular"
+          size="large"
+          text="continue_with"
+          logo_alignment="left"
+          width={String(buttonWidth)}
+        />
+      ) : null}
     </div>
   );
 }

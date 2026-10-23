@@ -8,6 +8,9 @@ const HISTORY_LIMIT = 20;
 // MongoDB stops at 16 MB per document. Keeping the newest exchanges means a
 // long thread never reaches that ceiling.
 const MAX_STORED_MESSAGES = 200;
+// The message schema is 8000 characters. A model can answer longer than that,
+// so the stored and returned reply is capped instead of failing the save.
+const MAX_MESSAGE_CHARS = 8000;
 
 const toProviderMessage = (message) => ({
   role: message.role,
@@ -58,6 +61,7 @@ export const chat = asyncHandler(async (req, res) => {
     settings,
     messages: [...history, { role: "user", content: message }],
   });
+  const replyText = providerAnswer.reply.slice(0, MAX_MESSAGE_CHARS);
 
   if (!conversation) {
     conversation = new Conversation({
@@ -66,7 +70,7 @@ export const chat = asyncHandler(async (req, res) => {
     });
   }
 
-  await saveExchange(conversation, message, providerAnswer.reply);
+  await saveExchange(conversation, message, replyText);
 
   res.json({
     success: true,
@@ -75,7 +79,7 @@ export const chat = asyncHandler(async (req, res) => {
         uid: conversation.uid,
         title: conversation.title,
       },
-      reply: { role: "assistant", content: providerAnswer.reply },
+      reply: { role: "assistant", content: replyText },
       provider: providerAnswer.provider,
       model: providerAnswer.model,
     },

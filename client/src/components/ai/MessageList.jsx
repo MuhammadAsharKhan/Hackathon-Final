@@ -100,7 +100,7 @@ export default function MessageList({
             </div>
           </div>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-6" role="log" aria-live="polite">
             {messages.map((message) => (
               <MessageBubble key={message.key} message={message} />
             ))}

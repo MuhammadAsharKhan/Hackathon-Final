@@ -11,9 +11,14 @@ const emailField = z.preprocess(
   }).optional()
 );
 
+// A blank number is read as 0 by Zod, which either fails the minimum or, for
+// TRUST_PROXY_HOPS, silently overrides the default. Blank means unset.
+const numberField = (schema, fallback) =>
+  z.preprocess(emptyToUndefined, schema.default(fallback));
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "production"]).default("development"),
-  PORT: z.coerce.number().int().positive().default(5000),
+  PORT: numberField(z.coerce.number().int().positive(), 5000),
   MONGODB_URI: z.string().min(1, "MONGODB_URI is required"),
   JWT_ACCESS_SECRET: z
     .string()
@@ -22,12 +27,15 @@ const envSchema = z.object({
     .string()
     .min(32, "JWT_REFRESH_SECRET must be at least 32 characters"),
   ACCESS_TOKEN_TTL: z.string().min(1).default("15m"),
-  REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(7),
+  REFRESH_TOKEN_TTL_DAYS: numberField(
+    z.coerce.number().int().positive(),
+    7
+  ),
   CLIENT_URL: z.string().default("http://localhost:5173"),
   COOKIE_SAMESITE: z.enum(["lax", "strict", "none"]).default("lax"),
-  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).default(1),
+  TRUST_PROXY_HOPS: numberField(z.coerce.number().int().min(0), 1),
   SELF_URL: z.preprocess(emptyToUndefined, z.string().url().optional()),
-  KEEP_ALIVE_MINUTES: z.coerce.number().int().positive().default(4),
+  KEEP_ALIVE_MINUTES: numberField(z.coerce.number().int().positive(), 4),
   ADMIN_EMAIL: emailField,
   ADMIN_PASSWORD: z.preprocess(
     emptyToUndefined,
@@ -55,7 +63,7 @@ const envSchema = z.object({
   AI_KEY_SECRET: z
     .string()
     .regex(/^[0-9a-fA-F]{64}$/, "AI_KEY_SECRET must be 64 hex characters"),
-  AI_COOLDOWN_SECONDS: z.coerce.number().int().positive().default(60),
+  AI_COOLDOWN_SECONDS: numberField(z.coerce.number().int().positive(), 60),
   GEMINI_API_KEY_1: z.preprocess(emptyToUndefined, z.string().optional()),
   GEMINI_API_KEY_2: z.preprocess(emptyToUndefined, z.string().optional()),
   GROK_API_KEY_1: z.preprocess(emptyToUndefined, z.string().optional()),
