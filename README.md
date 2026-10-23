@@ -90,7 +90,7 @@ If your shell already exports `PORT`, the server may pick it up. Prefix the comm
 
 | Variable | Required | Default | Purpose |
 | --- | --- | --- | --- |
-| `VITE_API_URL` | No | `/api` | API base URL. Keep `/api` in development and on Vercel so the proxy or rewrite handles it. Set an absolute URL only when the browser must call the API directly. |
+| `VITE_API_URL` | No | `/api` | API base URL. It must be a path such as `/api`, because the browser then calls the page's own origin and the dev proxy or the Vercel rewrite forwards it. An absolute URL is ignored: it would make every request cross-origin, where the response is blocked unless the origin is in `CLIENT_URL` and the refresh cookie is never sent. |
 | `VITE_GOOGLE_CLIENT_ID` | No | empty | Shows the Google buttons on Login and Register. Use the same client id as `GOOGLE_CLIENT_ID`; without it the pages show the plain form. |
 | `VITE_FACEBOOK_APP_ID` | No | empty | Shows the Facebook button under the Google button on Login and Register. Use the same app id as `FACEBOOK_APP_ID`; without it the button is hidden. |
 
@@ -173,9 +173,9 @@ Client (`npm run <script> --prefix client`):
    ```
 
    The first rewrite proxies API calls so the browser sees one origin. The second rewrite makes client-side routes work on refresh. A 502 from `/api/*` means the destination host is down or wrong, because requests never reach Express.
-4. Add `VITE_API_URL=/api` in the Vercel project settings, or omit it and rely on the default.
+4. Leave `VITE_API_URL` unset, or set it to `/api`. The client ignores absolute values, so a stale Railway URL in the project settings cannot turn API calls cross-origin.
 5. Deploy and test register, login, a page reload while signed in, and logout on the deployed domain.
-6. Add the Vercel domain to `CLIENT_URL` in Railway if you added the API host to the client env.
+6. Add the Vercel domain to `CLIENT_URL` in Railway only when the browser calls the API directly. Through the rewrite the app's own origin is used, so CORS headers are not needed.
 
 ### 4. Keep-alive
 
@@ -207,7 +207,7 @@ Free MongoDB Atlas clusters and free Railway services sleep when idle. Two layer
 | `npm error ... package.json` under `/app/server` | The service root directory is wrong. Set it to the repository root for the monorepo, or to `server` when the service only runs the API. |
 | `Invalid environment configuration` | A required variable is missing or too short. The server prints the field names in the log. |
 | `MongooseServerSelectionError` or Atlas could not connect | Add the host to Atlas Network Access and confirm the database user can read and write the database in `MONGODB_URI`. |
-| `Origin not allowed` | The browser origin is not in `CLIENT_URL`. Comma-separate several origins. |
+| CORS error in the console (`No 'Access-Control-Allow-Origin' header`) | The page is calling the API on another origin. Keep `VITE_API_URL=/api` so the dev proxy or the Vercel rewrite forwards the call, or add the page's origin to `CLIENT_URL` when the browser must reach the API directly. |
 | Signed out after every request | The refresh cookie is not reaching the API. Check `COOKIE_SAMESITE`, that the request uses `credentials`, and that the client and API share a site or the client proxies `/api`. |
 | `429 Too many requests` | The login limiter allows 20 failed attempts per 15 minutes per IP; the global limiter allows 300 API requests per 15 minutes per IP; the reset routes allow 10 per 15 minutes per IP; the uid lookup allows 30 per minute. Behind two proxies set `TRUST_PROXY_HOPS=2`, otherwise every visitor shares the proxy's bucket. |
 | AI Buddy answers `503 AI Buddy is busy. Try again in a minute.` | Every provider key is cooling down, disabled or marked invalid. Check `GET /api/admin/ai/keys` as an admin. |

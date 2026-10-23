@@ -1,8 +1,18 @@
 import axios from "axios";
 import { clearToken, getToken, setToken } from "@/lib/tokenStore";
 
+const configuredBaseUrl = (import.meta.env.VITE_API_URL || "").trim();
+
+// Requests have to stay on the origin that served the page so the host can
+// forward /api to the API: the Vite dev proxy, or the Vercel rewrite in
+// client/vercel.json. An absolute URL makes every call cross-origin, where the
+// browser only allows the response when CLIENT_URL lists that exact domain and
+// the httpOnly refresh cookie is never sent at all, so a stale absolute value
+// is ignored instead of trusted.
+const baseURL = configuredBaseUrl.startsWith("/") ? configuredBaseUrl : "/api";
+
 const http = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "/api",
+  baseURL,
   withCredentials: true,
 });
 

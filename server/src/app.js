@@ -10,7 +10,6 @@ import healthRoutes from "./routes/health.routes.js";
 import { globalLimiter } from "./middleware/rateLimit.js";
 import { notFound } from "./middleware/notFound.js";
 import { errorHandler } from "./middleware/error.js";
-import ApiError from "./utils/ApiError.js";
 
 const app = express();
 
@@ -24,12 +23,15 @@ app.set("trust proxy", config.trustProxyHops);
 app.use(helmet());
 app.use(compression());
 
+// CORS headers only tell the browser which origins may read a response. They
+// must not decide whether the request runs: the app calls the API through the
+// host's /api rewrite, so the browser still sends the app's origin and a
+// deployment domain missing from CLIENT_URL would otherwise fail every call.
+// Requests authenticate with a Bearer token or the httpOnly refresh cookie,
+// which SameSite keeps off cross-site requests either way.
 app.use(
   cors({
-    origin: (origin, callback) => {
-      if (isAllowedOrigin(origin)) return callback(null, true);
-      return callback(new ApiError(403, "Origin not allowed"));
-    },
+    origin: (origin, callback) => callback(null, isAllowedOrigin(origin)),
     credentials: true,
   })
 );
