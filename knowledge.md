@@ -145,7 +145,7 @@ Do not use: seamless, elevate, unlock, empower, leverage, robust, cutting-edge, 
 
 ## AI Buddy
 
-`routes/ai.routes.js` holds both `/ai` and `/admin/ai` and is mounted with one line in `routes/index.js`. `aiKeyPool.js` claims keys atomically, least recently used first, and rotates on 429, 5xx, timeout, network, 401 and 403. A 4xx answer from the provider that another key cannot fix answers 422 and records `lastError`. Rotation stops at a 28 second deadline with 12 second attempts, so a proxy never sees a request run past 30 seconds. An empty model reply becomes "I cannot help with that request." A conversation keeps only the newest 200 messages, which protects the 16 MB document limit. All keys are masked in responses and encrypted in the database.
+`routes/ai.routes.js` holds both `/ai` and `/admin/ai` and is mounted with one line in `routes/index.js`. `aiKeyPool.js` claims keys atomically, least recently used first, and rotates on 429, 5xx, timeout, network, 401 and 403. A 4xx answer from the provider that another key cannot fix answers 422 and records `lastError`. When nothing answers it returns 503 with `code: "ai_no_active_keys"` (no key to claim) or `"ai_keys_failed"` (every claimed key failed). On boot `aiSetup.js` imports each environment key the database cannot already decrypt, so adding a key to the deployment and restarting is enough. Rotation stops at a 28 second deadline with 12 second attempts, so a proxy never sees a request run past 30 seconds. An empty model reply becomes "I cannot help with that request." A conversation keeps only the newest 200 messages, which protects the 16 MB document limit. All keys are masked in responses and encrypted in the database.
 
 ### Remove AI Buddy
 

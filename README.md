@@ -83,7 +83,7 @@ If your shell already exports `PORT`, the server may pick it up. Prefix the comm
 | `MAIL_FROM` | No | `onboarding@resend.dev` | Sender address for reset and verification emails. |
 | `AI_KEY_SECRET` | Yes | none | 64 hex characters. Encrypts stored AI provider keys. |
 | `AI_COOLDOWN_SECONDS` | No | `60` | Cooldown after a provider 429, 5xx, timeout or network error. |
-| `GEMINI_API_KEY_1`, `GEMINI_API_KEY_2` | No | empty | Seed keys for the Gemini provider. Admin changes in the database win afterwards. |
+| `GEMINI_API_KEY_1`, `GEMINI_API_KEY_2` | No | empty | Default Gemini keys. Each boot adds the ones the database does not already hold, so adding a key here works on the next restart. Removing one here does not delete it. |
 | `GROK_API_KEY_1`, `GROK_API_KEY_2` | No | empty | Seed keys for the OpenAI-compatible provider. Accepts a Groq key (`gsk_`) or an xAI key (`xai-`); all of them must use one vendor. |
 
 ### client/.env
@@ -211,4 +211,4 @@ Free MongoDB Atlas clusters and free Railway services sleep when idle. Two layer
 | `[GSI_LOGGER]: The given origin is not allowed for the given client ID` | Google sign-in only runs on origins listed on the OAuth client. In Google Cloud Console, edit the web client behind `VITE_GOOGLE_CLIENT_ID` and add each exact origin with no path, for example `https://your-app.vercel.app` and `http://localhost:5173`. The client id must equal `GOOGLE_CLIENT_ID` on the API. |
 | Signed out after every request | The refresh cookie is not reaching the API. Check `COOKIE_SAMESITE`, that the request uses `credentials`, and that the client and API share a site or the client proxies `/api`. |
 | `429 Too many requests` | The login limiter allows 20 failed attempts per 15 minutes per IP; the global limiter allows 300 API requests per 15 minutes per IP; the reset routes allow 10 per 15 minutes per IP; the uid lookup allows 30 per minute. Behind two proxies set `TRUST_PROXY_HOPS=2`, otherwise every visitor shares the proxy's bucket. |
-| AI Buddy answers `503 AI Buddy is busy. Try again in a minute.` | Every provider key is cooling down, disabled or marked invalid. Check `GET /api/admin/ai/keys` as an admin. |
+| AI Buddy answers `503 AI Buddy is busy. Try again in a minute.` | The pool had nothing that could answer. The response `code` says which: `ai_no_active_keys` means no key was available at all (none stored, or all disabled, invalid or cooling down), `ai_keys_failed` means keys were tried and each one failed. The boot log reports how many keys were imported from the environment. Check `GET /api/admin/ai/keys` as an admin for the per-key `lastError`. |

@@ -12,6 +12,8 @@ const ATTEMPT_TIMEOUT_MS = 12 * 1000;
 const EMPTY_REPLY = "I cannot help with that request.";
 const REQUEST_FAILED = "The model could not answer that.";
 const ALL_FAILED = "AI Buddy is busy. Try again in a minute.";
+const NO_ACTIVE_KEY = "ai_no_active_keys";
+const KEYS_FAILED = "ai_keys_failed";
 
 const orderProviders = (defaultProvider) =>
   defaultProvider === "gemini" ? ["gemini", "grok"] : ["grok", "gemini"];
@@ -67,6 +69,9 @@ const markKeyFailure = async (key, providerError) => {
   }
 
   await AiKey.updateOne({ _id: key.id }, { $set: updates });
+  console.warn(
+    `AI key ${key.id} (${key.provider}) failed: ${providerError.kind} ${updates.lastError}`
+  );
 };
 
 const requestProviderReply = (key, settings, messages, timeoutMs) => {
@@ -143,7 +148,12 @@ export const chatWithPool = async ({ settings, messages }) => {
   );
   if (answer) return answer;
 
-  throw new ApiError(503, ALL_FAILED);
+  // The client shows one message either way, but the code tells an operator
+  // whether there was nothing to try or every key that was tried failed.
+  const code = triedKeyIds.length > 0 ? KEYS_FAILED : NO_ACTIVE_KEY;
+  console.warn(`AI chat failed (${code}): ${triedKeyIds.length} key(s) tried`);
+
+  throw new ApiError(503, ALL_FAILED, undefined, code);
 };
 
 export const testAiKey = async (key) => {
