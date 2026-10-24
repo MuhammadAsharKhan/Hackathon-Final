@@ -1,447 +1,115 @@
 # Viva guide
 
-This is a plain-language walkthrough of the main flows for the hackathon review. Each section explains what happens, where the code lives, and the questions a reviewer is likely to ask. Read the flow first, then open the named files and follow the function calls.
+How the main flows work, which files and functions run them, and short answers to the questions a reviewer is likely to ask. Every path is relative to the repository root.
 
-## 1. Register and login
+## 1. Register and email verification
 
-### What happens
+Registering starts in `client/src/pages/Register.jsx`, which collects a name, email, age and password and calls `register` in `client/src/context/AuthContext.jsx`, which posts to `/api/auth/register`. The route in `server/src/routes/auth.routes.js` applies `authLimiter` and `validate(registerSchema)` before the `register` controller in `server/src/controllers/auth.controller.js` runs. The validator in `server/src/validators/auth.validators.js` trims and lowercases the email and rejects weak passwords, and every later lookup does the same, so `A@x.com ` and `a@x.com` are one account. If the email already belongs to a verified account the controller answers 409; if an earlier sign-up never verified, it updates that record and sends a fresh code instead of locking the address. `sendOtpCode` creates a six digit code, stores only its hash in a `PasswordOtp` document with a ten minute expiry, a sixty second resend gap and five sends per hour, then mails it through `sendEmail`; when no Resend key is configured in development, the code is printed in the server log instead. The browser keeps the pending address with `client/src/lib/pendingVerification.js` and moves to `client/src/pages/VerifyEmail.jsx`, which submits the code to `verifyEmail`. That controller compares the code with `otpCodeMatches`, sets `emailVerified`, deletes the OTP record and starts a session with `createSession` and `setRefreshCookie`.
 
-1. The client sends `name`, `email`, `password`, `age` and an optional `gender` to `POST /api/auth/register`.
-2. `register` checks for an existing email, creates the user unverified, emails a six digit code and returns 201 without a session.
-3. The `User` model hashes the password in a `pre("save")` hook with bcrypt and gives the new user a nine digit uid in a `pre("validate")` hook.
-4. The client stores only the email in `sessionStorage` and shows `/verify-email`. The code is exchanged for a session there.
-5. Login sends `email` and `password` to `POST /api/auth/login`, where `login` loads the password hash and compares it with bcrypt.
-6. If the email is unknown, `login` still compares against `DUMMY_HASH`, so a failed email and a failed password take about the same time.
-7. A correct password on an unverified account sends a fresh code and answers 403 with `EMAIL_NOT_VERIFIED`, which the client turns into the verify page.
-8. On success, `createSession` returns an access token and a refresh token, and `setRefreshCookie` stores the refresh token in an httpOnly cookie.
-9. The client stores the access token in memory and sends it as `Authorization: Bearer <token>` on later requests.
+Questions a reviewer may ask:
 
-### Files and functions
+- Why does an unverified duplicate register not return 409? The account is not usable yet, and treating an abandoned sign-up as an error would let anyone block an address they do not own. The password and details are replaced and a new code is sent.
+- Why store only the hash of the code? A database dump should not hand someone a working code. The code is short lived and the comparison is constant time.
+- Why a code instead of a link? The same six box screen works on every device, is quick to retype, and does not depend on a deep link reaching the right browser.
+- Why not sign the user in before verification? The session is issued only after `emailVerified` is true, so a mistyped address cannot hold an account.
 
-- `server/src/controllers/auth.controller.js`: `register`, `login`
-- `server/src/models/User.js`: `assignUid` and `hashPassword` hooks, `comparePassword`
-- `server/src/utils/tokens.js`: `createSession`, `setRefreshCookie`
-- `client/src/pages/Register.jsx`, `client/src/pages/Login.jsx`, `client/src/pages/VerifyEmail.jsx`
-- `client/src/context/AuthContext.jsx`: `startSession`, `login`, `register`, `verifyEmail`
+## 2. Login and refresh tokens
 
-### Likely questions
+`client/src/pages/Login.jsx` calls `login` in `client/src/context/AuthContext.jsx`, which posts to `/api/auth/login`. The `login` controller finds the user, compares the password with `bcrypt.compare`, and compares against a dummy hash when the email is unknown so both failures take similar time and return the same 401 message. A correct password on an unverified account answers 403 with code `EMAIL_NOT_VERIFIED` and sends a new code; a wrong password never reveals verification state. `createSession` in `server/src/utils/tokens.js` signs a short lived access JWT and a refresh JWT with a random `jti`, stores a SHA-256 hash of the refresh token in the user document, keeps the five newest sessions, and `setRefreshCookie` writes the token as an httpOnly cookie scoped to `/api/auth`. The client keeps only the access token, in memory in `client/src/lib/tokenStore.js`; `client/src/api/http.js` adds it as a bearer header and, on a 401, calls `refreshSession` once for all waiting requests and retries the original call once. `refreshSession` in the controller verifies the cookie, loads the user, rejects deleted or unverified accounts, rotates the stored hash and issues a new pair. A rotated token stays acceptable for ten seconds so two tabs refreshing together do not sign each other out; reuse after that window revokes every session and clears the cookie. `logout` removes the stored hash and clears the same cookie. On a page load the client only asks for a refresh when `hasSessionHint` from `client/src/lib/tokenStore.js` is true, a flag written on login and cleared on logout or on a failed refresh, because the httpOnly cookie cannot be read by the page and a guest would otherwise get a 401 on every visit.
 
-**Why is the password hashed in the model instead of the controller?**
-The model owns the password field, so every save path gets the same treatment. If a future controller creates or changes a user, it cannot forget to hash. The hook checks `isModified("password")`, so saving an unrelated field does not re-hash the old hash.
+Questions a reviewer may ask:
 
-**Why compare against a dummy hash when the email is unknown?**
-Without it, a missing account returns almost immediately while a real account spends time in bcrypt. That timing difference lets an attacker learn which emails are registered. The dummy comparison keeps both failures in the same range.
+- Why an httpOnly cookie for the refresh token? JavaScript cannot read it, so a cross-site scripting bug cannot steal it, and the browser sends it automatically with `sameSite` protection.
+- Why hash the refresh token in the database? A leaked database then contains no usable token. The server compares hashes, so a stolen row cannot be replayed as a cookie.
+- Why rotate the refresh token? A new token per refresh means an old copy stops working, which is what makes reuse detection possible.
+- Why not call refresh on every page load? The refresh cookie is httpOnly, so the page cannot see it. Asking anyway returns 401 for every visitor and logs an error in the console, so a small local flag says when a session is worth restoring.
+- Why rate limit login? Passwords can be guessed; `authLimiter` in `server/src/middleware/rateLimit.js` allows 20 failed attempts per 15 minutes per IP and does not count successful ones.
+- Why 15 minute access tokens and 7 day refresh tokens? Short access tokens limit the damage of a leaked one, and the refresh cookie saves the user from signing in every quarter of an hour.
 
-**Why is validation done on the client and the server?**
-The client copy gives fast feedback and avoids pointless requests. The server copy is the one that matters for security because a request can bypass the browser entirely. Both use the same password rules, including the 72 byte bcrypt limit.
+## 3. Protected routes
 
-**Why does register not sign the user in?**
-Anyone can type an address that is not theirs. Signing in before the code is entered would let a stranger hold a session for an email they do not own. The session starts only when the mailbox is proved.
+`server/src/middleware/auth.js` exports `protect`, which reads the Authorization bearer token, verifies it with the access secret, loads the user from MongoDB and rejects deleted or unverified accounts, then puts a small user object on `req.user`. Routes apply it per router, for example `server/src/routes/user.routes.js`, and admin routes add `restrictTo("admin")` so the role check happens on the server. On the client, `client/src/components/ProtectedRoute.jsx` waits for `AuthContext` loading to finish, sends signed out visitors to `/login` with the requested location in state, and sends non-admins to `/dashboard`. `client/src/components/GuestRoute.jsx` does the opposite for login, register and verify, and `client/src/lib/navigation.js` rebuilds the full path, query and hash a deep link asked for. When an API call fails with 401, `client/src/api/http.js` refreshes and retries once, and a failed refresh dispatches `auth:logout` so the context clears the user without a redirect loop.
 
-## 2. Email verification
+Questions a reviewer may ask:
 
-### What happens
+- Why load the user on every request? A token can outlive an account. Loading the document catches deleted users and users who have not verified their email, and it gives the controller fresh profile data.
+- Why guard on both client and server? The client guard is only for a clean screen transition. The server guard is the one that actually protects data.
+- Why Express and Mongoose? Express keeps the request pipeline small and explicit with middleware, and Mongoose gives schemas, indexes, validation and hooks such as the uid assignment and password hashing in one place. Both are JavaScript, so one language covers the whole project.
+- Why is the role not trusted from the token? The token payload is only a hint. Authorization uses `req.user.role` loaded from the database, so a role change takes effect immediately.
 
-1. `POST /api/auth/register` creates the account with `emailVerified: false` and sends a code. The answer is `{ email, verificationRequired: true }` with no tokens and no cookie.
-2. The code lives in `PasswordOtp` with `purpose: "email-verification"`, keyed by email and purpose, so it cannot collide with a password reset code.
-3. The rules match the reset flow: six digits, HMAC-SHA256 with `JWT_RESET_SECRET`, ten minute life, five wrong tries, a 60 second gap between sends and five sends per hour.
-4. `POST /api/auth/verify-email` compares the code, sets `emailVerified`, deletes the record and answers like login with the user, access token and refresh cookie.
-5. `POST /api/auth/resend-verification` always answers 200 and sends only when an unverified account exists within the limits.
-6. Login checks the password first. A correct password on an unverified account sends a code and answers 403 with `code: "EMAIL_NOT_VERIFIED"`.
-7. `protect` and `refreshSession` reject an unverified account with 401, so even a hand-made token cannot use the API.
-8. Registering again with an unverified email updates the profile and password and sends a fresh code, so an abandoned sign-up does not lock the address.
-9. `EMAIL_VERIFICATION_REQUIRED=false` skips the code and signs the new account in immediately. Old accounts are marked verified at startup.
-10. The client keeps the email in `sessionStorage`, shows `/verify-email`, and moves to the originally requested page after success.
+## 4. OTP password reset
 
-### Files and functions
+The modal in `client/src/components/auth/ForgotPasswordModal.jsx` posts the email to `/api/auth/forgot-password`, which sits behind `otpLimiter`. `forgotPassword` in `auth.controller.js` looks the user up, calls `sendOtpCode` with the `password-reset` purpose, and always answers with the same generic sentence so it cannot be used to discover accounts. The code is stored hashed in a `PasswordOtp` document together with `attempts`, `sendCount`, `windowStart` and a ten minute `expiresAt`. `verifyOtp` checks the record and expiry, compares with `otpCodeMatches`, and on a wrong code increments `attempts` atomically with `$inc`, deleting the record at five failures so parallel guesses cannot pass the limit. A correct code clears the code hash, issues a short lived reset JWT with `signResetToken`, stores its `jti` on the record and returns the token, which makes the exchange single use. `resetPassword` verifies the token and the stored `jti`, refuses a password equal to the old one, saves the new hash through `saveNewPassword` and clears every refresh token so other sessions end. The same `EmailVerificationFlow` is reused from the profile password panel to prove the mailbox before an account without a password sets one.
 
-- `server/src/controllers/auth.controller.js`: `register`, `sendOtpCode`, `verifyEmail`, `resendVerification`, `login`
-- `server/src/models/PasswordOtp.js`: `purpose` and the `{ email, purpose }` unique index
-- `server/src/utils/ensureEmailVerification.js`: backfill and old index cleanup
-- `server/src/middleware/auth.js`, `refreshSession`: the unverified checks
-- `client/src/pages/VerifyEmail.jsx`, `client/src/lib/pendingVerification.js`
-- `client/src/hooks/useResendCountdown.js`, `client/src/components/auth/EmailVerificationFlow.jsx`
+Questions a reviewer may ask:
 
-### Likely questions
+- Why not send a reset link? A six digit code is shorter to use, works on a phone that opened the mail, and avoids a second token in a URL that could leak through referrers.
+- Why delete the record after five wrong codes? It stops slow guessing and forces a fresh code, which the user can request after the sixty second gap.
+- Why is the reset token single use? The token only works while its `jti` matches the stored record, and `resetPassword` deletes that record on success.
+- Why do other sessions die after a reset? Someone resetting a password may be recovering a compromised account, so every old refresh token is cleared.
 
-**Why reuse the password OTP model?**
-The hashing, expiry, attempt limit and send quota were already solved and tested. A `purpose` field separates the two jobs while the compound index keeps one active code per email and purpose.
+## 5. Google sign-in
 
-**Why not trust the client saying the email is verified?**
-The browser is not a security boundary. The server sets the flag, and every protected request reads it from the database, so a client cannot claim a state it does not have.
+`client/src/components/auth/GoogleButton.jsx` renders the Google widget only when `VITE_GOOGLE_CLIENT_ID` exists and passes the returned credential to `loginWithGoogle` in `AuthContext`. The route `/api/auth/google` is rate limited and validated, then `googleSignIn` in `auth.controller.js` answers 503 when `GOOGLE_CLIENT_ID` is missing on the server. `verifyGoogleCredential` uses `google-auth-library` to check the ID token signature, expiry and audience against that client id, and the controller refuses a payload whose `email_verified` is not true. `findOrCreateGoogleUser` looks for a user by `googleId` first and by email second, so a second sign-in finds the same account instead of making a duplicate. A new Google user gets `emailVerified: true`, `hasPassword: false` and the Google picture as avatar; an existing unverified account is marked verified and its password is removed, because Google has just proved who owns the mailbox. The session is created with the same `createSession` and `setRefreshCookie` path as a password login, and the client navigates to the deep link it was trying to open.
 
-**Why clear the password when Google links to an unverified account?**
-The account existed before anyone proved the address. The stored hash may belong to whoever typed the email first, so Google's proof of ownership must invalidate it. Clearing the hash and sessions closes that window.
+Questions a reviewer may ask:
 
-**What does the startup backfill do?**
-Accounts created before this feature have no `emailVerified` field. Marking them verified keeps current users working. The same task gives old OTP records the reset purpose and drops the old unique index on `userId`.
+- Why verify the credential on the server? The browser can send anything. Only the server can check the signature and audience with the client id it trusts.
+- Why check the audience? It proves the token was issued for this application and not for another site using the same Google project.
+- Why remove the password of an unverified account? That password was set by someone who never proved they own the mailbox. Google has now proved it, so the old secret is discarded and the real owner signs in safely.
+- Why does a Google-only account have no password? `hasPassword` stays false, and the profile page asks for email verification before the user sets a first password.
 
-## 3. Access and refresh tokens
+## 6. uid generation
 
-### What happens
+Every new user gets a uid in the pre-validate hook of `server/src/models/User.js`, which calls `createUid` from `server/src/utils/uid.js`. `createUid` asks `crypto.randomInt` for a number between 100000000 and 999999999, so the result is always nine digits and never starts with zero, then checks `model.exists` before returning it. It tries ten times and throws if it cannot find a free number, which in practice would mean the space is exhausted. The field is unique and immutable at the schema level, so the database index is the last guard even if two requests race past the existence check. `ensureUids` in `server/src/utils/ensureUids.js` backfills accounts created before uids existed and is safe to run on every boot. `findUserByUid` returns only `uid`, `name`, `avatarUrl` and `createdAt`, so a lookup never exposes an email, age or gender, and the route is limited to thirty lookups a minute.
 
-1. `createSession` signs a short lived access token with `JWT_ACCESS_SECRET` and a longer lived refresh token with `JWT_REFRESH_SECRET`.
-2. The access token stays in `client/src/lib/tokenStore.js`, which is a module level variable. It is never written to `localStorage` or `sessionStorage`.
-3. The refresh token is sent in an httpOnly cookie named `rt`, scoped to `/api/auth`, with `sameSite` from `COOKIE_SAMESITE` and `secure` in production.
-4. The server stores only a SHA-256 hash of each refresh token on the user document.
-5. On a page load, `AuthContext` calls `POST /api/auth/refresh`, gets a new access token and user, and continues the session without showing the login page.
-6. When a request returns 401, the axios response interceptor calls refresh once and retries the original request with the new access token.
-7. `refreshSession` in the auth controller removes the old token hash, records it as `previousRefreshToken`, and creates a new session.
+Questions a reviewer may ask:
 
-### Files and functions
+- What if two users get the same uid? The unique index rejects the second write. The request that raced gets a duplicate key error, which the error handler maps to 409, and the generator checks for an existing uid before returning one.
+- Why not sequential ids? They would reveal how many accounts exist and make guessing other users easy.
+- Why is uid immutable? Other pages and shared links refer to it. Letting it change would break those references and the avatar public id that uses it.
 
-- `server/src/utils/tokens.js`: `signAccessToken`, `signRefreshToken`, `hashToken`, `createSession`, `removeExpiredSessions`, `storeRefreshToken`
-- `server/src/controllers/auth.controller.js`: `refreshSession`, `rotateStoredToken`, `isRecentRotation`, `revokeAllSessions`
-- `client/src/api/http.js`: `refreshSession`, `retryWithFreshToken`
-- `client/src/context/AuthContext.jsx`: the bootstrap effect
-- `client/src/lib/tokenStore.js`
+## 7. Avatar upload
 
-### Likely questions
+`client/src/components/profile/AvatarUpload.jsx` checks the chosen file before sending it: only JPEG, PNG and WebP, at most 2 MB, and it resets the file input so choosing the same file twice still fires. It shows a local preview from `URL.createObjectURL`, revokes that URL when it changes or the component unmounts, and sends the file with `FormData` through `client/src/api/users.api.js`. The route `PUT /api/users/me/avatar` runs `protect` and `avatarUpload`, a multer memory upload in `server/src/middleware/upload.js` that enforces the same 2 MB limit and MIME types on the server. `updateAvatar` in `server/src/controllers/user.controller.js` answers 503 when Cloudinary is not configured, then streams the buffer through `uploadToCloudinary` to the folder `hackathon/avatars` with the public id `user_<uid>`, overwrite on, and a 400 by 400 face crop. A provider failure becomes a clean 502 message, never a stack or a Cloudinary body. The controller stores the returned `secure_url` and public id on the user, and the client updates `AuthContext` so the new picture shows immediately. `deleteAvatar` destroys the stored public id and clears both fields, logging rather than failing when Cloudinary refuses the delete.
 
-**Why keep the access token in memory instead of localStorage?**
-Any script that runs on the page can read localStorage. An in-memory token disappears on reload, but the httpOnly refresh cookie restores the session. This limits the damage from a cross-site scripting bug.
+Questions a reviewer may ask:
 
-**Why is the refresh token in an httpOnly cookie?**
-JavaScript cannot read an httpOnly cookie, so a script injected into the page cannot steal the long lived token. The cookie is also scoped to `/api/auth`, so ordinary API requests do not carry it, and `sameSite` blocks most cross-site sends.
+- Why check the file again on the server? The browser check is a convenience. A crafted request can skip it, so the multer filter and the 2 MB limit are the real enforcement.
+- Why memory storage? The file is small and goes straight to Cloudinary, so there is no temporary file to clean up.
+- Why the same public id per user? It keeps one avatar per account and replaces the old file instead of leaving orphans, and Cloudinary returns a new versioned URL for the replacement.
+- Why 400 by 400 with a face crop? Every avatar has the same shape and size, so the interface never has to deal with odd aspect ratios.
 
-**Why store a hash of the refresh token?**
-A database leak should not hand an attacker working sessions. The server can hash the presented token and compare it with the stored hash, just as it does with passwords.
+## 8. AI chat and key rotation
 
-**Why rotate the refresh token?**
-Rotation makes a stolen token useful only until the real user refreshes. If the old token appears again after the grace window, the server treats it as reuse, clears every session for that user and returns 401.
+`client/src/pages/AiBuddy.jsx` drives `client/src/hooks/useChat.js`, which calls `sendChat` from `client/src/api/ai.api.js` and posts to `/api/ai/chat` behind `protect` and `aiChatLimiter`. The `chat` controller in `server/src/controllers/ai.controller.js` validates a 1 to 4000 character message, loads the stored settings with `loadAiSettings`, finds the conversation by uid and owner, and sends the last twenty messages to `chatWithPool`. Claiming a key happens in `server/src/services/aiKeyPool.js`: `claimAvailableKey` uses `findOneAndUpdate` to pick an enabled, active key of the default provider that is not cooling down and has not been tried, ordered by `lastUsedAt` so the least recently used key goes first, and increments its usage count. The stored key is decrypted with `decryptSecret`, and `askGemini` or `askGrok` in `server/src/services/aiProviders.js` makes the call with a twelve second abort timeout. An auth failure marks the key invalid, a rate limit, server error, timeout or network error puts it on cooldown until the retry-after or `AI_COOLDOWN_SECONDS`, and a 400 or 404 stops the rotation with a recorded `lastError` because another key would fail the same request. The loop tries at most six keys and stops at a twenty-eight second deadline, then answers 503 with code `ai_no_active_keys` when nothing was available or `ai_keys_failed` when every tried key failed. The reply is capped at 8000 characters, saved so parallel messages are not lost (a new conversation in one save, later exchanges with an atomic `$push` and `$slice`), and returned with the provider and model name.
 
-**Why allow the previous token for ten seconds?**
-Two tabs can load at the same time and both send the same cookie. The short grace window lets the second tab finish instead of being treated as an attacker. After `REFRESH_GRACE_MS`, the same token is rejected.
+Questions a reviewer may ask:
 
-**Why keep only five sessions?**
-Each login adds a refresh token. Without a cap, the array would grow forever. `createSession` removes expired tokens and `$slice: -5` keeps the newest five.
+- How is the next AI key chosen? The pool asks the database for the enabled, active, non-cooling key with the oldest `lastUsedAt`, excluding keys already tried for this request, and marks it used in the same atomic update.
+- What happens when a key fails? Auth errors disable it, temporary errors cool it down, and a rejected request records the reason and stops. The next key is tried when the failure is worth retrying, and a 503 with a clear code comes back when nothing works.
+- Why store keys encrypted? A database backup or a support export should not expose provider keys. Encryption uses AES-256-GCM with `AI_KEY_SECRET`, the encrypted value is never selected by normal queries, and every response shows only a masked tail.
+- Why not rotate on a 400 or 404? The request itself is wrong or the model name does not exist. Another key would produce the same answer, so the reason is recorded for the admin instead of burning every key.
+- Why these timeouts? Twelve seconds per attempt keeps one slow provider from blocking the rest, and twenty-eight seconds total stays under the reverse proxy limit.
+- Why do environment keys not overwrite admin edits? `setupAi` in `server/src/services/aiSetup.js` imports them only when no keys are stored, so a key added or disabled in the admin screen survives a restart.
 
-## 4. Protected routes
+## 9. Error handling
 
-### What happens
+Every controller is wrapped in `asyncHandler` from `server/src/utils/asyncHandler.js`, which forwards a rejected promise to `next` so no async error escapes Express. Handlers throw `ApiError` from `server/src/utils/ApiError.js` with a status, message and optional code or field errors, and the `validate` middleware in `server/src/middleware/validate.js` turns Zod failures into a 400 with one entry per field. Unknown paths reach `notFound` in `server/src/middleware/notFound.js`, and everything else lands in `errorHandler` in `server/src/middleware/error.js`. That function maps `ApiError`, Zod, Mongoose validation and cast errors, duplicate key 11000, JWT errors, multer limits and body parser errors to the same JSON shape, and returns a generic 500 message for anything else. Stacks are logged on the server only and never sent to the browser, and production responses contain no internal message. The process also catches unhandled rejections and exits, and SIGTERM closes the HTTP server and Mongo connection so a redeploy does not leave a half-dead process. On the client, `getErrorMessage` in `client/src/lib/errors.js` turns the same responses into the text shown by forms and toasts.
 
-1. The client route table wraps signed-in pages in `ProtectedRoute` and auth pages in `GuestRoute`.
-2. `ProtectedRoute` waits for `AuthContext` to finish its bootstrap refresh, then redirects a signed-out user to `/login` with the current location in `state.from`.
-3. `Login` and `Register` use `redirectPath` to rebuild the full path, including search and hash, and navigate there after success.
-4. `GuestRoute` sends a signed-in user away from `/login` and `/register`.
-5. On the server, `protect` reads the bearer token, verifies it and loads a small user object into `req.user`. An account that has not verified its email is rejected with 401.
-6. `restrictTo("admin")` checks `req.user.role` before an admin route runs.
-7. Every user-owned query also filters by `owner: req.user.id`; the route guard is not the only protection.
+Questions a reviewer may ask:
 
-### Files and functions
-
-- `server/src/middleware/auth.js`: `protect`, `restrictTo`
-- `client/src/components/ProtectedRoute.jsx`, `client/src/components/GuestRoute.jsx`
-- `client/src/lib/navigation.js`: `redirectPath`
-- `client/src/App.jsx`
-- `client/src/pages/AdminUsers.jsx`, `client/src/pages/AdminAi.jsx`
-
-### Likely questions
-
-**Is hiding a page in React enough protection?**
-No. The browser code is not a security boundary. Every protected endpoint runs `protect`, and admin endpoints also run `restrictTo("admin")`. The page guard only decides what to render.
-
-**Why load the user from the database on every request?**
-A token can outlive a deleted or demoted account. Loading the current user means a deleted account stops working immediately, a role change takes effect on the next request and an unverified account stays locked out.
-
-**Why do item queries filter by owner as well as id?**
-An id from the client is not proof of ownership. Filtering by both `_id` and `owner` prevents one user from reading or changing another user's item by guessing an id.
-
-**What happens when the session expires while a page is open?**
-The 401 interceptor refreshes the token and retries once. If refresh also fails, the token is cleared, `auth:logout` resets the context and the route guard sends the user to sign in.
-
-## 5. OTP password reset
-
-### What happens
-
-1. `POST /api/auth/forgot-password` looks up the email and always returns the same message, whether or not the account exists.
-2. `sendOtpCode` allows one code per minute and five per hour for each purpose. Over the limit it returns silently instead of revealing the quota.
-3. The six digit code is generated with `crypto.randomInt`, hashed with HMAC-SHA256 using `JWT_RESET_SECRET`, and stored with a ten minute expiry.
-4. `POST /api/auth/verify-otp` compares the submitted code with `crypto.timingSafeEqual`.
-5. A wrong code increments `attempts`; after five wrong tries the record is deleted.
-6. A correct code is replaced by a short lived reset token. The token carries the user id, the purpose and a `jti` that is stored on the OTP record.
-7. `POST /api/auth/reset-password` checks the purpose and `jti`, rejects a password equal to the current one, saves the new password, marks the account verified and deletes the OTP record.
-8. A reset clears every refresh token, so every other session is signed out.
-
-### Files and functions
-
-- `server/src/controllers/auth.controller.js`: `forgotPassword`, `readSendQuota`, `sendOtpCode`, `verifyOtp`, `recordFailedOtpAttempt`, `issueResetToken`, `resetPassword`
-- `server/src/utils/otp.js`: `createOtpCode`, `hashOtpCode`, `otpCodeMatches`, `signResetToken`, `verifyResetToken`
-- `server/src/utils/password.js`: `ensurePasswordDiffers`, `saveNewPassword`
-- `server/src/models/PasswordOtp.js`
-- `client/src/components/auth/EmailVerificationFlow.jsx`, `ForgotPasswordModal.jsx`
-
-### Likely questions
-
-**Why always return the same message for forgot password?**
-A different answer for a registered email would let anyone test which emails have accounts. The endpoint says a code was sent if the account exists, and the client shows the same line either way.
-
-**Why hash a six digit code?**
-Six digits are easy to brute force, so the hash alone is not enough. The real protections are the ten minute expiry, the five attempt limit, the one minute resend gap and the per hour send cap. Hashing still means a database reader cannot simply read the current code.
-
-**Why is the code not the reset token?**
-The code is short and human typed. The reset token is a signed JWT tied to a specific OTP record by `jti`. Exchanging the code once for a token means the code cannot be replayed after a successful reset.
-
-**Why is the reset token purpose checked?**
-Both the access token and the reset token are JWTs. Checking `purpose === "password-reset"` stops a token minted for one job from being used for another.
-
-**Why does a reset sign out other sessions?**
-If someone changed the password because an account was compromised, the attacker's refresh tokens must stop working. Clearing the array is the simplest reliable way to do that.
-
-## 6. Google sign-in
-
-### What happens
-
-1. `GoogleButton` renders only when `VITE_GOOGLE_CLIENT_ID` is set.
-2. Google returns an ID token credential to the browser.
-3. The client sends it to `POST /api/auth/google`.
-4. `verifyGoogleCredential` verifies the token with `google-auth-library` and checks that the audience matches `GOOGLE_CLIENT_ID`.
-5. `googleSignIn` rejects a profile whose email is missing or not verified.
-6. `findOrCreateGoogleUser` looks up the user by `googleId`, then by email, links `googleId` to an existing account, or creates a new verified account with `hasPassword: false`.
-7. The response uses the same session path as a password login, so the refresh cookie and access token work the same way.
-8. A new Google account has `age: null`, so `CompleteProfileModal` asks for an age before the user continues.
-
-### Files and functions
-
-- `server/src/controllers/auth.controller.js`: `googleSignIn`, `verifyGoogleCredential`, `findOrCreateGoogleUser`, `googleDisplayName`
-- `server/src/validators/auth.validators.js`: `googleSignInSchema`
-- `client/src/components/auth/GoogleButton.jsx`, `GoogleSection.jsx`
-- `client/src/components/auth/CompleteProfileModal.jsx`
-
-### Likely questions
-
-**Why require a verified Google email?**
-Without that check, someone could create a Google account with an email they do not control and link it to an existing password account. The verified flag is what makes the email a trustworthy identity.
-
-**What happens if a user registered with a password and later uses Google?**
-The server finds the account by email and adds `googleId`. On a verified account the password remains, so both sign-in methods work. If the password account was never verified, Google has now proved the address, so the old password hash and refresh tokens are cleared first. The reverse is safe because linking happens only after Google confirms the email.
-
-**Why does the server verify the credential instead of trusting the client?**
-The browser can send any string. Only Google's public keys can prove that the credential was issued for this app. `verifyIdToken` checks the signature and the audience.
-
-**What if Google is not configured?**
-`config.googleClientId` is empty, so the route answers 503 and the client hides the Google button and divider. The rest of the auth flow still works.
-
-## 7. uid generation
-
-### What happens
-
-1. A uid is nine digits, for example `839498284`.
-2. `createUid` draws a number with `crypto.randomInt(100000000, 1000000000)`.
-3. It checks the model with `exists({ uid })` before returning.
-4. If the number is taken, it tries again, up to ten times.
-5. Every model that carries a uid assigns it in a `pre("validate")` hook, so inserts cannot forget it.
-6. The field has a unique index and is immutable.
-7. `ensureUids` runs at startup and fills uid on older documents that predate the field.
-8. Public lookups use the uid, while ownership checks still use the internal id and `owner`.
-
-### Files and functions
-
-- `server/src/utils/uid.js`: `createUid`
-- `server/src/utils/ensureUids.js`: `backfillUids`, `ensureUids`
-- `server/src/models/User.js`, `Item.js`, `Conversation.js`
-- `server/src/controllers/user.controller.js`: `findUserByUid`
-- `server/src/controllers/item.controller.js`: `getItemByUid`
-
-### Likely questions
-
-**Why use a nine digit uid instead of the Mongo ObjectId?**
-A uid is short enough to read, say and type. It also gives the public user lookup a separate identifier from the internal `_id`, so the API does not expose database ids.
-
-**What happens if two users get the same uid?**
-The pre-check makes it very unlikely, but the unique index is the final guard. If two requests race past the check, the second insert fails with a duplicate key error, and the error handler turns that into a 409. The uid is assigned before the insert, so a retry would need a new request. The chance is about one in 900 million per pair.
-
-**Why is the uid immutable?**
-Other people may share their uid. Changing it would break every link and lookup. The model marks the field immutable and the controllers never accept a uid for an ownership check.
-
-**Why does the server backfill uid at startup?**
-Older documents were created before the field existed. The unique index and the hooks only cover new inserts, so `ensureUids` fills the gaps once. It logs only how many documents changed.
-
-## 8. Avatar upload
-
-### What happens
-
-1. `AvatarUpload` checks the file type and size in the browser before sending anything.
-2. The user picks a JPEG, PNG or WebP image up to 2 MB.
-3. `uploadAvatar` sends multipart form data with the field name `avatar`.
-4. `avatarUpload` uses multer memory storage, a 2 MB limit, one file and the same type allowlist.
-5. `updateAvatar` checks that Cloudinary is configured, then `uploadToCloudinary` streams the buffer to the `hackathon/avatars` folder.
-6. The Cloudinary public id is `user_<uid>` with `overwrite: true`, so a new upload replaces the old file instead of piling up copies.
-7. The image is cropped to 400 by 400 with face gravity, then the user stores `avatarUrl` and `avatarPublicId`.
-8. `deleteAvatar` removes the Cloudinary asset and clears both fields. If Cloudinary is missing, both routes answer 503.
-
-### Files and functions
-
-- `server/src/middleware/upload.js`: `avatarUpload`
-- `server/src/controllers/user.controller.js`: `updateAvatar`, `uploadToCloudinary`, `deleteAvatar`
-- `server/src/config/cloudinary.js`: `isCloudinaryConfigured`
-- `client/src/components/profile/AvatarUpload.jsx`
-- `client/src/api/users.api.js`: `uploadAvatar`, `deleteAvatar`
-
-### Likely questions
-
-**Why keep the upload in memory instead of writing it to disk?**
-The server is stateless and may run in more than one place. A temporary disk file would need cleanup and would not be shared between instances. The file is small, so a buffer is simpler.
-
-**Why check the type and size twice?**
-The browser check gives a fast, friendly message. The server check is the real one because a request can bypass the page. Multer enforces the size and `fileFilter` enforces the MIME type.
-
-**Why is the Cloudinary public id based on the uid?**
-It gives one predictable asset per user and lets `overwrite: true` replace the old image. It also means a user cannot choose the public id or overwrite someone else's asset.
-
-**What happens if the old image delete fails?**
-`deleteAvatar` logs the Cloudinary error and still clears the user fields. The account no longer points at the image, which is the important state. The orphaned asset can be cleaned up separately.
-
-## 9. AI chat
-
-### What happens
-
-1. `POST /api/ai/chat` requires a signed-in user, a message and an optional `conversationUid`.
-2. `loadAiSettings` returns the single `AiSettings` document, creating defaults if it is missing.
-3. If a conversation uid is present, `findOwnedConversation` loads it with `owner: req.user.id`; otherwise the chat starts a new conversation.
-4. The last 20 messages are mapped to provider messages and sent with the new user message.
-5. `chatWithPool` claims a provider key and calls Gemini or the OpenAI-compatible Grok endpoint.
-6. The reply is saved only after the provider succeeds. A failed call does not leave a half written conversation.
-7. A new conversation uses the first 40 characters of the first message as its title.
-8. The response returns the conversation uid and title, the assistant reply and the provider and model that answered, and the client appends the reply and refreshes the list.
-
-### Files and functions
-
-- `server/src/controllers/ai.controller.js`: `chat`, `findOwnedConversation`, `saveExchange`, `listConversations`, `getConversation`, `deleteConversation`
-- `server/src/services/aiKeyPool.js`: `chatWithPool`, `tryAvailableKeys`
-- `server/src/services/aiProviders.js`: `askGemini`, `askGrok`
-- `server/src/models/Conversation.js`
-- `client/src/hooks/useChat.js`: `send`, `retry`, `openConversation`
-- `client/src/components/ai/ChatPanel.jsx`, `MessageList.jsx`, `MessageInput.jsx`
-
-### Likely questions
-
-**Why send only the last 20 messages?**
-Provider requests have token limits and cost money. Twenty messages usually preserve the thread without sending the entire history. The full conversation stays in MongoDB for the next request and for the UI.
-
-**Why save the exchange only after the provider replies?**
-If the provider fails, saving the user message would leave a conversation that looks answered but is not. Saving both messages together keeps each stored turn complete.
-
-**Why is the conversation scoped by owner?**
-A conversation uid is public enough to appear in a URL, but it is not an authorization token. Every read, write and delete filters by `owner: req.user.id`, so another signed-in user cannot open it.
-
-**Why does the client keep the failed message for Retry?**
-The request may fail after the user message was shown. Retrying with `appendUser: false` resends the same text without adding a duplicate bubble. The server still has no stored turn because it only saves on success.
-
-**Why render Markdown without raw HTML?**
-Assistant output is untrusted text. `react-markdown` with `remark-gfm` and no raw HTML plugin means a reply cannot inject a script or an event handler. Code blocks are rendered by the shared `CodeBlock` component.
-
-## 10. AI key rotation
-
-### What happens
-
-1. Provider keys are encrypted with AES-256-GCM using `AI_KEY_SECRET` before they are stored.
-2. The API only returns a masked value with the last four characters.
-3. `claimAvailableKey` atomically claims an enabled, active key whose cooldown has passed, using `findOneAndUpdate` and `sort: { lastUsedAt: 1 }`.
-4. Claiming sets `lastUsedAt` and increments `usageCount` before the provider call.
-5. `tryAvailableKeys` starts with the default provider and tries at most six keys across both providers.
-6. A 401 or 403 marks the key `invalid`. A 429 or 5xx sets `cooldownUntil` from `Retry-After` or `AI_COOLDOWN_SECONDS`.
-7. A timeout or network error also cools the key down. Other 4xx errors stop the request with 422 because another key will not fix a bad request.
-8. When no usable key remains, the route answers 503 with a short busy message. Provider bodies and plaintext keys never reach the response.
-
-### Files and functions
-
-- `server/src/services/aiKeyPool.js`: `claimAvailableKey`, `claimNextAvailableKey`, `markKeyFailure`, `requestProviderReply`, `tryAvailableKeys`, `chatWithPool`, `testAiKey`
-- `server/src/services/aiProviders.js`: `ProviderError`, `postJsonRequest`, `classifyStatus`, `throwProviderError`
-- `server/src/utils/crypto.js`: `encryptSecret`, `decryptSecret`, `maskKey`
-- `server/src/controllers/aiAdmin.controller.js`: `buildKeyResponse`, `listAiKeys`, `createAiKey`, `updateAiKey`, `testStoredAiKey`
-- `client/src/pages/AdminAi.jsx`, `client/src/components/ai/AdminKeysTable.jsx`
-
-### Likely questions
-
-**How does rotation pick a key?**
-It picks the least recently used enabled key for the preferred provider, then the other provider if none is available. The claim is a single atomic Mongo update, so two parallel requests should not claim the same key at the same moment.
-
-**What happens when a key fails?**
-The failure type decides. An auth failure disables the key until an admin replaces or re-enables it. A rate limit or server failure gives it a cooldown and moves on. A request error stops the call, because sending the same bad request to another key would only waste time.
-
-**Why encrypt the keys?**
-The database is a separate trust boundary from the application configuration. Encryption with `AI_KEY_SECRET` means a database dump does not directly reveal working provider keys. The app still needs the secret in its environment to decrypt them.
-
-**Why only show the last four characters?**
-Admins need to tell keys apart, not read them back. Masking keeps the full key out of the API response, the browser and browser history. Replacing a key is the way to change it.
-
-**Why cap the attempts at six?**
-Each failed attempt costs time and can hit another provider limit. Six covers the normal two to four keys in a small deployment and then returns a clear 503 instead of hanging.
-
-## 11. Error handling
-
-### What happens
-
-1. Controllers throw `ApiError` for expected failures such as a missing item, a bad password or a forbidden role.
-2. `asyncHandler` wraps every async controller and forwards a rejected promise to Express with `next`.
-3. Zod validation runs in `validate` before the controller and returns a 400 with `errors: [{ field, message }]`.
-4. `normalizeError` maps ApiError, Zod errors, Mongoose validation errors, cast errors, duplicate keys, JWT errors, multer errors and bad JSON to one response shape.
-5. Unexpected errors become a generic 500. The stack is logged, never sent in production.
-6. The success shape is `{ success: true, data, message? }`; the error shape is `{ success: false, message, code?, errors? }`. The optional `code` lets the client react to a specific case, such as `EMAIL_NOT_VERIFIED`.
-7. On the client, `getErrorMessage` reads the message and `getFieldErrors` turns the field list into an object for form inputs.
-8. A 401 can trigger the one retry described in the token flow. Other failures are shown in the form, an error state or a toast.
-
-### Files and functions
-
-- `server/src/utils/ApiError.js`
-- `server/src/utils/asyncHandler.js`
-- `server/src/middleware/validate.js`
-- `server/src/middleware/error.js`: `normalizeError`, `errorHandler`
-- `client/src/lib/errors.js`: `getErrorMessage`, `getFieldErrors`
-- `client/src/api/http.js`: the response interceptor
-
-### Likely questions
-
-**Why a custom ApiError instead of throwing strings?**
-A string has no status code and no field list. `ApiError` carries `statusCode`, `message` and optional `errors`, so the handler can build a consistent response without guessing.
-
-**Why does asyncHandler exist?**
-Express 4 does not catch a rejected promise from an async handler. Without the wrapper, the request would hang or produce an unhandled rejection. `asyncHandler` turns the rejection into `next(error)`.
-
-**Why hide the stack in production?**
-A stack can reveal file paths, library versions and internal structure. The client only needs a short message. Developers still get the stack in the server log.
-
-**Why return field errors as an array?**
-The form needs to attach a message to a specific input. An array of `{ field, message }` keeps that mapping explicit and works for nested Zod paths such as `name.first`.
-
-**Why is the client validation not enough?**
-It is a convenience, not a security control. A request can skip the browser or be edited by hand. The server repeats every rule and is the only place that decides whether data is valid.
+- Why one central error handler? Every route then returns the same shape, and a controller only has to throw instead of building a response for each failure.
+- Why hide the 500 details? Internal messages can name files, queries or providers. The log keeps the stack for the developer, and the user gets a neutral sentence.
+- Why is the JSON body limited to 10 KB? The API expects small JSON documents. The limit stops a large body from using memory before validation even runs.
+- Why does the process exit on an unhandled rejection? After an unexpected rejection the process state is unknown. Exiting lets the platform restart a clean instance instead of serving broken requests.
 
 ## Where to change things quickly
 
-### Add a field to a model
+**Add a field to an existing model.** For items, add the field and its validation to `server/src/models/Item.js`, allow it in `server/src/validators/item.validators.js`, and pass it through `createItem` and `updateItem` in `server/src/controllers/item.controller.js`. On the client add the input to `client/src/components/items/ItemFormModal.jsx` and show it in `client/src/components/items/ItemRow.jsx`. A user profile field follows the same idea: `server/src/models/User.js`, `server/src/validators/user.validators.js`, the allow list in `updateProfile` in `server/src/controllers/user.controller.js`, then `client/src/components/profile/AccountPanel.jsx`.
 
-1. Add the field to the Mongoose schema in `server/src/models/`.
-2. Add it to the create or update Zod schema in `server/src/validators/`.
-3. Read and write it in the controller. Remember `$set` and `runValidators: true` on updates.
-4. If the field should be public, check the model `toJSON` transform. It already removes `_id`, `__v`, passwords and provider secrets.
-5. Add the input to the relevant client form and the display to the relevant page.
-6. Add the field to the API contract in `docs/ARCHITECTURE.md` if it changes a request or response.
-7. Backfill old documents only if the field is required. `ensureUids` is the pattern for a one-time startup backfill.
+**Add a module.** Copy the items module: create a model in `server/src/models`, a Zod schema in `server/src/validators`, a controller in `server/src/controllers` and a router in `server/src/routes`, then mount the router in `server/src/routes/index.js` with `router.use("/things", thingRoutes)`. On the client add an API file next to `client/src/api/items.api.js`, a page modelled on `client/src/pages/Dashboard.jsx` with the shared table and pagination pieces, a route in `client/src/App.jsx` inside `ProtectedRoute`, and a link in the `links` array in `client/src/components/layout/Navbar.jsx`.
 
-### Add a module
+**Change the theme color.** The colors are CSS variables in `client/src/index.css` under `:root`, for example `--primary` and `--ring`. `client/tailwind.config.js` maps those variables to classes such as `bg-primary` and `text-foreground`, so editing a variable changes every component that uses the matching class. Keep contrast in mind, update the small color table in `theme.md`, and check the change on the buttons, links and focus outline.
 
-1. Create the model, validator, controller and routes file under `server/src/`. Scope user-owned queries by `owner: req.user.id`.
-2. Mount the router in `server/src/routes/index.js`.
-3. Create `client/src/api/things.api.js` using the shared `http` instance.
-4. Build the page from `ItemRow`, `ItemFormModal`, `Pagination` and the shared UI. Use `Dashboard.jsx` as the reference.
-5. Add the route in `client/src/App.jsx`, wrapped in `ProtectedRoute` when it needs a session.
-6. Add the nav link in `client/src/components/layout/Navbar.jsx`.
-7. Run the API suite and `npm run build:client`.
-
-### Change the theme
-
-1. Read `theme.md` first. It lists the tokens and the copy rules.
-2. Change the CSS variables in `client/src/index.css`. The Tailwind names in `client/tailwind.config.js` map to those variables.
-3. Change a shared primitive only when every page should change. Page specific classes belong on the page.
-4. Check both light and dark appearance if you add a color, and check a 360px viewport.
-5. Do not hardcode hex values in JSX. Use the token utilities such as `bg-background`, `text-muted-foreground` and `border-border`.
-
-### Change the AI prompt
-
-1. Sign in as an admin and open `/admin/ai`.
-2. Edit `System prompt` and save. This writes `AiSettings.systemPrompt` and affects the next chat request.
-3. Change `AI_DEFAULTS.systemPrompt` in `server/src/config/aiDefaults.js` only when you want a new default for a fresh database. Existing databases keep their saved prompt.
-4. Change the provider, model or base URL on the same page. The base URL must be https, except localhost in development.
-5. Run one chat and one key test after the change. A model name that the provider does not recognize will fail at request time, not when the settings are saved.
+**Change the AI prompt.** The default lives in `AI_DEFAULTS.systemPrompt` in `server/src/config/aiDefaults.js`. For a running instance, an admin edits it in `client/src/components/ai/AiSettingsForm.jsx`, which saves through `PUT /api/admin/ai/settings` to `updateAiSettings` in `server/src/controllers/aiAdmin.controller.js`; the prompt is validated by `aiSettingsSchema` and stored on the `AiSettings` document. The chat request sends it to the provider in `askGemini` and `askGrok` in `server/src/services/aiProviders.js`. `setupAi` creates the default only when no settings exist, so an admin change survives a restart.
