@@ -69,13 +69,13 @@ export const register = asyncHandler(async (req, res) => {
     return;
   }
 
-  // An abandoned sign-up is updated and resent instead of locking the email.
+  // An abandoned sign-up is updated and resent instead of locking the email,
+  // but its password stays: this caller has not proven it owns the account.
   let user = existingUser;
   if (user) {
     user.name = name;
     user.age = age;
     user.gender = gender ?? null;
-    user.password = password;
     await user.save();
   } else {
     user = await User.create({

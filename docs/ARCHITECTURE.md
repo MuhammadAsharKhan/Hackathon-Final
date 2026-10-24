@@ -233,7 +233,7 @@ Pages keep composition local: search and status changes reset to page one, pagin
 
 New password accounts start with `emailVerified: false`. `EMAIL_VERIFICATION_REQUIRED` defaults to `true`; setting it to `false` verifies the account during register and returns the session as before, which is the fallback when email delivery is not ready.
 
-1. `POST /api/auth/register` validates the body, creates the user and sends a code. It answers 201 with `{ email, verificationRequired: true }` and no tokens or cookie. A verified email is 409. An unverified email updates the name, age, gender and password, then sends a fresh code so an abandoned sign-up does not lock the address.
+1. `POST /api/auth/register` validates the body, creates the user and sends a code. It answers 201 with `{ email, verificationRequired: true }` and no tokens or cookie. A verified email is 409. An unverified email updates the name, age and gender, leaves the stored password alone because the caller has not proven it owns the account, and sends a fresh code so an abandoned sign-up does not lock the address.
 2. The code reuses `PasswordOtp` with `purpose: "email-verification"` and the same rules as a reset code: six digits from `crypto.randomInt`, HMAC-SHA256, ten minute life, five wrong tries, a 60 second gap and five sends per hour. The unique index is `{ email, purpose }`, so a reset code and a verification code can coexist.
 3. `POST /api/auth/verify-email` accepts `{ email, otp }`, marks the user verified, deletes the code and responds like login with the user, access token and refresh cookie.
 4. `POST /api/auth/resend-verification` always answers 200 with a generic message and sends only for an unverified account within the limits.
