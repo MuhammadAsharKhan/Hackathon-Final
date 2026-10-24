@@ -220,11 +220,11 @@ Pages keep composition local: search and status changes reset to page one, pagin
 ## Auth flow
 
 1. Register creates the account, sends a verification code and returns no session. Verifying the code, and later logins, use the same session: a 15-minute access JWT signed with `JWT_ACCESS_SECRET`, and a 7-day refresh JWT signed with `JWT_REFRESH_SECRET`.
-2. The access token is returned in the response body and kept in memory by `client/src/lib/tokenStore.js`. Nothing is written to `localStorage` or `sessionStorage`.
+2. The access token is returned in the response body and kept in memory by `client/src/lib/tokenStore.js`. No token is written to `localStorage` or `sessionStorage`; the only stored value is the one-flag hint `baseline.hasSession`.
 3. The refresh token is set as an httpOnly cookie named `rt` with `path=/api/auth`, `sameSite` from `COOKIE_SAMESITE`, and `secure` in production. Its SHA-256 hash is stored on the user document. At most five sessions are kept; the oldest is dropped.
-4. On mount, `AuthContext` calls `POST /api/auth/refresh`. The browser sends the cookie, the server rotates it (the old hash is removed, a new one is stored) and returns a fresh access token plus the user. This is the silent restore after a reload.
+4. On mount, `AuthContext` calls `POST /api/auth/refresh` only when the session hint is set. The hint is written on login and cleared on logout or on a failed refresh, so a first-time visitor makes no request and sees no 401 in the console. The browser sends the cookie, the server rotates it (the old hash is removed, a new one is stored) and returns a fresh access token plus the user. This is the silent restore after a reload.
 5. When any request returns 401, the response interceptor calls refresh once. Concurrent 401s share one promise, so only one rotation happens. The original request is retried once with the new token.
-6. If refresh fails, the token is cleared and a window event `auth:logout` resets context state; route guards then send the user to `/login`.
+6. If refresh fails, the token and the hint are cleared and a window event `auth:logout` resets context state; route guards then send the user to `/login`.
 7. If a refresh token that is no longer stored is presented, the server treats it as reuse, clears every session for that user and returns 401.
 8. Logout removes the presented session hash and clears the cookie. The access token stays valid until it expires; the client discards it immediately.
 9. Changing the password clears all sessions, creates a new one and returns a new access token, which the profile page stores.

@@ -1,6 +1,12 @@
 import { createContext, useCallback, useEffect, useMemo, useState } from "react";
 import * as authApi from "@/api/auth.api";
-import { clearToken, setToken } from "@/lib/tokenStore";
+import {
+  clearToken,
+  forgetSession,
+  hasSessionHint,
+  rememberSession,
+  setToken,
+} from "@/lib/tokenStore";
 
 export const AuthContext = createContext(null);
 
@@ -10,6 +16,7 @@ export function AuthProvider({ children }) {
 
   const startSession = useCallback((session) => {
     setToken(session.accessToken);
+    rememberSession();
     setUser(session.user);
     return session.user;
   }, []);
@@ -18,7 +25,14 @@ export function AuthProvider({ children }) {
     let active = true;
 
     // A full page load restores the session from the httpOnly refresh cookie.
+    // Without the hint there is nothing to restore, and asking anyway would
+    // put a 401 in the console of every visitor.
     const bootstrap = async () => {
+      if (!hasSessionHint()) {
+        if (active) setLoading(false);
+        return;
+      }
+
       try {
         const session = await authApi.refresh();
         if (!active) return;
@@ -26,6 +40,7 @@ export function AuthProvider({ children }) {
       } catch {
         if (!active) return;
         clearToken();
+        forgetSession();
         setUser(null);
       } finally {
         if (active) setLoading(false);
@@ -36,6 +51,7 @@ export function AuthProvider({ children }) {
 
     const handleLogout = () => {
       clearToken();
+      forgetSession();
       setUser(null);
     };
 
@@ -92,6 +108,7 @@ export function AuthProvider({ children }) {
   const logout = useCallback(async () => {
     await authApi.logout().catch(() => {});
     clearToken();
+    forgetSession();
     setUser(null);
   }, []);
 
