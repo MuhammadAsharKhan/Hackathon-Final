@@ -37,6 +37,32 @@ const createAdminUser = ({ name, email, password }) =>
     mustChangePassword: false,
   });
 
+// A database shared with another app, or a setup attempt that failed after the
+// account was written, can already hold this email. Promote that account to the
+// first admin instead of failing the whole setup on the unique email index.
+const createOrPromoteAdmin = async ({ name, email, password }) => {
+  const normalizedEmail = email.trim().toLowerCase();
+  const existing = await User.findOne({ email: normalizedEmail });
+
+  if (!existing) {
+    const user = await createAdminUser({
+      name,
+      email: normalizedEmail,
+      password,
+    });
+    return { user, created: true };
+  }
+
+  existing.name = name;
+  existing.password = password;
+  existing.role = "admin";
+  existing.isActive = true;
+  existing.mustChangePassword = false;
+  await existing.save();
+
+  return { user: existing, created: false };
+};
+
 const adminActor = (user) => ({ id: user.id, name: user.name, role: user.role });
 
 // The claim is one atomic update on the settings document. A second request
@@ -74,12 +100,15 @@ export const completeSetup = async ({
   if (!claimedSettings) throw new ApiError(409, "Setup is already complete");
 
   let adminUser = null;
+  let createdAdmin = false;
   try {
-    adminUser = await createAdminUser({
+    const admin = await createOrPromoteAdmin({
       name: adminName,
       email: adminEmail,
       password: adminPassword,
     });
+    adminUser = admin.user;
+    createdAdmin = admin.created;
     await seedLeaveTypes();
     await log(
       adminActor(adminUser),
@@ -90,7 +119,9 @@ export const completeSetup = async ({
       { companyName, adminEmail: adminUser.email }
     );
   } catch (error) {
-    if (adminUser) await User.deleteOne({ _id: adminUser.id }).catch(() => {});
+    if (createdAdmin && adminUser) {
+      await User.deleteOne({ _id: adminUser.id }).catch(() => {});
+    }
     await releaseSetupClaim().catch(() => {});
     throw error;
   }
