@@ -1,6 +1,15 @@
 import { ZodError } from "zod";
 import ApiError from "../utils/ApiError.js";
 
+const DUPLICATE_LABELS = {
+  email: "Email",
+  code: "Employee code",
+  name: "Name",
+  date: "Date",
+  month: "Month",
+  key: "Setting",
+};
+
 const normalizeError = (err) => {
   if (err instanceof ApiError) {
     return {
@@ -38,7 +47,13 @@ const normalizeError = (err) => {
   }
 
   if (err.code === 11000) {
-    return { statusCode: 409, message: "Resource already exists" };
+    // The index that rejected the write names the field, so the client can say
+    // which value is taken instead of a bare conflict.
+    const [field] = Object.keys(err.keyPattern ?? err.keyValue ?? {});
+    if (!field) return { statusCode: 409, message: "Resource already exists" };
+
+    const label = DUPLICATE_LABELS[field] ?? field;
+    return { statusCode: 409, message: `${label} is already in use` };
   }
 
   if (err.name === "JsonWebTokenError" || err.name === "TokenExpiredError") {
