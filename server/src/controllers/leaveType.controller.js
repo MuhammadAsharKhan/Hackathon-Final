@@ -1,3 +1,4 @@
+import LeaveRequest from "../models/LeaveRequest.js";
 import LeaveType from "../models/LeaveType.js";
 import ApiError from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
@@ -49,6 +50,16 @@ export const updateLeaveType = asyncHandler(async (req, res) => {
 
 export const deleteLeaveType = asyncHandler(async (req, res) => {
   const leaveType = await findLeaveType(req.params.id);
+
+  const requestCount = await LeaveRequest.countDocuments({
+    leaveTypeCode: leaveType.code,
+  });
+  if (requestCount > 0) {
+    throw new ApiError(
+      409,
+      `Leave type ${leaveType.name} cannot be deleted because ${requestCount} leave request(s) use it`
+    );
+  }
 
   const before = leaveType.toJSON();
   await leaveType.deleteOne();

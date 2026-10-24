@@ -166,5 +166,12 @@ export const isValidDateString = (dateString) => {
 export const isValidMonthString = (month) =>
   typeof month === "string" && MONTH_PATTERN.test(month);
 
+// "09:15" becomes 555. Anything that is not HH:mm returns null.
+export const timeStringToMinutes = (timeString) => {
+  const match = TIME_PATTERN.exec(timeString ?? "");
+  if (!match) return null;
+  return Number(match[1]) * 60 + Number(match[2]);
+};
+
 export const DAY_IN_MS = DAY_MS;
 export const DEFAULT_TIMEZONE_NAME = DEFAULT_TIMEZONE;

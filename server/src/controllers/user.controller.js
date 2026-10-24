@@ -1,50 +1,25 @@
-import Department from "../models/Department.js";
-import Designation from "../models/Designation.js";
 import Employee from "../models/Employee.js";
 import User from "../models/User.js";
 import ApiError from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { createTemporaryPassword } from "../utils/temporaryPassword.js";
 import { log } from "../services/auditService.js";
-import { allocateEmployeeCode } from "../services/employeeService.js";
+import {
+  allocateEmployeeCode,
+  assertEmailFree,
+  assertReferences,
+  buildWelcomeMessage,
+} from "../services/employeeService.js";
 import { notify } from "../services/notificationService.js";
-import { getSettings } from "../services/settingsService.js";
 
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-const ensureReferencesExist = async (departmentId, designationId) => {
-  const department = await Department.findById(departmentId).select("_id");
-  if (!department) throw new ApiError(422, "Department not found");
-
-  if (!designationId) return;
-
-  const designation = await Designation.findById(designationId).select("_id");
-  if (!designation) throw new ApiError(422, "Designation not found");
-};
-
-const ensureEmailIsFree = async (email) => {
-  const [existingUser, existingEmployee] = await Promise.all([
-    User.exists({ email }),
-    Employee.exists({ email }),
-  ]);
-
-  if (existingUser || existingEmployee) {
-    throw new ApiError(409, "Email is already in use");
-  }
-};
-
-const welcomeMessage = async () => {
-  const settings = await getSettings();
-  const companyName = settings?.companyName || "the company";
-  return `Your account for ${companyName} is ready. Change your temporary password to continue.`;
-};
 
 export const createHrUser = asyncHandler(async (req, res) => {
   const { name, email, departmentId, designationId, joinDate, basicSalary, gender, phone } =
     req.body;
 
-  await ensureReferencesExist(departmentId, designationId);
-  await ensureEmailIsFree(email);
+  await assertReferences(departmentId, designationId);
+  await assertEmailFree(email);
 
   const temporaryPassword = createTemporaryPassword();
 
@@ -83,7 +58,7 @@ export const createHrUser = asyncHandler(async (req, res) => {
     userId: user.id,
     type: "account",
     title: "Welcome",
-    message: await welcomeMessage(),
+    message: await buildWelcomeMessage(),
     link: "/change-password",
   });
 

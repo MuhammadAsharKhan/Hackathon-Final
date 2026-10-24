@@ -1,11 +1,14 @@
 import { Router } from "express";
 import aiRoutes from "./ai.routes.js";
 import announcementRoutes from "./announcement.routes.js";
+import attendanceRoutes from "./attendance.routes.js";
 import auditRoutes from "./audit.routes.js";
 import authRoutes from "./auth.routes.js";
 import departmentRoutes from "./department.routes.js";
 import designationRoutes from "./designation.routes.js";
+import employeeRoutes from "./employee.routes.js";
 import holidayRoutes from "./holiday.routes.js";
+import leaveRoutes from "./leave.routes.js";
 import leaveTypeRoutes from "./leaveType.routes.js";
 import meRoutes from "./me.routes.js";
 import notificationRoutes from "./notification.routes.js";
@@ -27,6 +30,9 @@ router.use("/me", meRoutes);
 router.use("/announcements", announcementRoutes);
 router.use("/notifications", notificationRoutes);
 router.use("/audit", auditRoutes);
+router.use("/employees", employeeRoutes);
+router.use("/attendance", attendanceRoutes);
+router.use("/leave", leaveRoutes);
 router.use(aiRoutes);
 
 export default router;

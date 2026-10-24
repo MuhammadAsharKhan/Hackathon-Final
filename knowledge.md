@@ -6,10 +6,10 @@ Orientation for coding agents working in this repository.
 
 HCM Lite: a human capital management app built on the hackathon MERN boilerplate. `prompts/00-SPEC.md` is the single source of truth; if code, docs or another prompt disagree with it, the spec wins.
 
-State after prompt 01 (backend foundation):
+State after prompts 01 and 02 (foundation and people):
 
-- The API has first-run setup, company settings, organization data, accounts, announcements, notifications and the audit trail.
-- Attendance, leave, payroll, dashboards and the assistant tools are not built yet. Their prompts add them.
+- The API has first-run setup, company settings, organization data, accounts, employees, attendance, leave, announcements, notifications and the audit trail.
+- Payroll, dashboards and the assistant tools are not built yet. Their prompts add them.
 - The client is still the boilerplate app. The frontend prompts replace it.
 
 ## Stack
@@ -25,10 +25,11 @@ State after prompt 01 (backend foundation):
 - `server/src/config/env.js`: Zod validation of every environment variable. The server exits on an invalid configuration.
 - `server/src/routes/index.js`: one `router.use` line per router. Add new routers here.
 - `server/src/{models,validators,controllers,routes}`: one file per concern.
-- `server/src/services/`: business rules. `settingsService` (cached singleton settings), `calendarService` (holiday set), `auditService.log`, `notificationService` (`notify`, `notifyMany`, `notifyActiveUsers`), `employeeService` (employee summary, code allocation), `setupService` (bootstrap, first-run setup, leave type seeds), plus the existing AI pool files.
+- `server/src/services/`: business rules. `settingsService` (cached singleton settings), `calendarService` (holiday set), `auditService.log`, `notificationService` (`notify`, `notifyMany`, `notifyApprovers`, `notifyActiveUsers`), `approvalService` (who may decide a request), `employeeService` (register, list, 360, update, salary, CSV, codes), `attendanceCalc.js` and `leaveCalc.js` (pure rules), `attendanceService`, `leaveService`, `setupService`, plus the AI pool files.
 - `server/src/utils/`: `dates.js`, `clock.js`, `money.js`, `haversine.js`, `temporaryPassword.js`, `tokens.js`, `password.js`, `otp.js`, `mailer.js`, `crypto.js`, `uid.js`, `ApiError.js`, `asyncHandler.js`, `keepAlive.js`.
 - `server/src/middleware/auth.js`: `protect` (token, account state, forced password change) and `restrictTo(...roles)`.
-- `server/test/*.test.js`: unit tests for dates, haversine, money and the temporary password.
+- `server/src/middleware/upload.js`: the 1 MB memory upload for the employee CSV.
+- `server/test/*.test.js`: unit tests for dates, haversine, money, the temporary password, day derivation, attendance timing and geofence, and leave rules.
 - `docs/ARCHITECTURE.md`: file tree, flows, API contract, module recipes.
 - `docs/VIVA.md`: plain-language walkthrough of the main flows.
 - `theme.md`: design tokens and UI rules for the client prompts.
@@ -72,6 +73,11 @@ Optional: `NODE_ENV`, `PORT`, `ACCESS_TOKEN_TTL`, `REFRESH_TOKEN_TTL_DAYS`, `CLI
 8. **Employee codes.** Use `allocateEmployeeCode()`; never build `EMP-0001` by hand.
 9. **Pagination.** Query `page` (default 1) and `limit` (default 10, max 100). Response data carries `pagination: { page, limit, total, pages }`.
 10. **Status codes.** 400 validation, 401 not signed in or inactive, 403 role or data scope, 404 not found, 409 conflict, 422 business rule broken.
+11. **Day status.** Derive days with `buildEmployeeDays` from `services/attendanceCalc.js`, never with an ad hoc rule. Records store their status when written, so a later settings change never rewrites history. The order is not employed, future, off, on leave, record, absent.
+12. **Shared day reader.** `getEmployeeDaysForRange(employeeIds, from, to, { now })` in `services/attendanceService.js` returns `Map<employeeId, days>`. Payroll and dashboards import it, so keep the signature stable.
+13. **Attendance writes.** Check-in and check-out stamp the server time and use the company date. A second check-in is 409, a check-out without a check-in is 422, approved leave covering today blocks a check-in. Camera check-in is the only path that rejects on location.
+14. **Leave.** Days are working days only. A request must stay inside one calendar year and cover at least one working day. Overlap and quota are checked on apply and again on approval, with the request itself excluded. Approvers are HR users; HR cannot decide its own request, and the admin decides HR requests only.
+15. **Salary.** HR cannot change its own salary. The admin changes HR salaries only. Employees never see another person's salary.
 
 ## Conventions
 

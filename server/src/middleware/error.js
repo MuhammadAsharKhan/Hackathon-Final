@@ -47,7 +47,7 @@ const normalizeError = (err) => {
 
   if (err.name === "MulterError") {
     if (err.code === "LIMIT_FILE_SIZE") {
-      return { statusCode: 413, message: "Image must be 2 MB or smaller" };
+      return { statusCode: 413, message: "File is too large" };
     }
     return { statusCode: 400, message: "Upload failed" };
   }

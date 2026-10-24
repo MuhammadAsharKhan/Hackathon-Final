@@ -8,6 +8,36 @@ export const notifyMany = async (entries) => {
   return Notification.insertMany(entries);
 };
 
+// Employees write to every HR user. When the requester is HR, the admins are
+// told as well, because HR cannot decide its own request.
+export const notifyApprovers = async ({
+  requesterUserId,
+  requesterRole,
+  type,
+  title,
+  message,
+  link = "",
+}) => {
+  const roles = requesterRole === "hr" ? ["hr", "admin"] : ["hr"];
+  const approvers = await User.find({
+    role: { $in: roles },
+    isActive: true,
+    _id: { $ne: requesterUserId },
+  })
+    .select("_id")
+    .lean();
+
+  return notifyMany(
+    approvers.map((approver) => ({
+      userId: approver._id,
+      type,
+      title,
+      message,
+      link,
+    }))
+  );
+};
+
 // Used by announcements: one row per active account, minus the author.
 export const notifyActiveUsers = async ({
   excludeUserId,
