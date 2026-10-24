@@ -18,9 +18,10 @@ router.get(
   validate(dashboardQuerySchema, "query"),
   getAdminDashboard
 );
+// The Admin reads the HR view for the day to day numbers (spec section 5).
 router.get(
   "/hr",
-  restrictTo("hr"),
+  restrictTo("hr", "admin"),
   validate(dashboardQuerySchema, "query"),
   getHrDashboard
 );

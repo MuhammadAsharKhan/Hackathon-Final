@@ -63,6 +63,10 @@ const envSchema = z.object({
   AI_COOLDOWN_SECONDS: numberField(z.coerce.number().int().positive(), 60),
   AI_API_KEY: z.preprocess(emptyToUndefined, z.string().optional()),
   AI_PROVIDER: z.enum(["gemini", "groq", "xai"]).default("gemini"),
+  GEMINI_API_KEY_1: z.preprocess(emptyToUndefined, z.string().optional()),
+  GEMINI_API_KEY_2: z.preprocess(emptyToUndefined, z.string().optional()),
+  GROK_API_KEY_1: z.preprocess(emptyToUndefined, z.string().optional()),
+  GROK_API_KEY_2: z.preprocess(emptyToUndefined, z.string().optional()),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -104,4 +108,14 @@ export const config = Object.freeze({
   aiCooldownSeconds: env.AI_COOLDOWN_SECONDS,
   aiApiKey: env.AI_API_KEY ?? "",
   aiProvider: env.AI_PROVIDER,
+  // The numbered variables seed the pool in order, so a deployment can carry
+  // several keys per provider without touching the admin screen.
+  aiKeyEnv: [
+    ["GEMINI_API_KEY_1", env.GEMINI_API_KEY_1],
+    ["GEMINI_API_KEY_2", env.GEMINI_API_KEY_2],
+    ["GROK_API_KEY_1", env.GROK_API_KEY_1],
+    ["GROK_API_KEY_2", env.GROK_API_KEY_2],
+  ]
+    .filter(([, value]) => Boolean(value))
+    .map(([name, value]) => ({ name, value })),
 });

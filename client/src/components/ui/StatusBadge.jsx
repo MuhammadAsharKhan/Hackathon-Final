@@ -12,6 +12,11 @@ const STATUS_MAP = {
     not_employed: { label: "Not employed", tone: "muted" },
     future: { label: "Upcoming", tone: "muted" },
   },
+  correction: {
+    pending: { label: "Pending", tone: "accent" },
+    approved: { label: "Approved", tone: "success" },
+    rejected: { label: "Rejected", tone: "danger" },
+  },
   leave: {
     pending: { label: "Pending", tone: "accent" },
     approved: { label: "Approved", tone: "success" },

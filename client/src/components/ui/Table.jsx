@@ -1,6 +1,12 @@
 import { cn } from "@/lib/cn";
 
-export function Table({ columns, className, children, ...props }) {
+export function Table({
+  columns,
+  className,
+  minWidthClass = "min-w-[38rem]",
+  children,
+  ...props
+}) {
   return (
     <div
       className={cn(
@@ -9,7 +15,7 @@ export function Table({ columns, className, children, ...props }) {
       )}
       {...props}
     >
-      <table className="w-full min-w-[38rem] border-collapse text-left text-sm">
+      <table className={`w-full ${minWidthClass} border-collapse text-left text-sm`}>
         <thead>
           <tr className="border-b border-border bg-surface text-xs text-muted-foreground">
             {columns.map((column, index) => (

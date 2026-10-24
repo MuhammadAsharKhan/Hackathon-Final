@@ -1,225 +1,200 @@
-# Hackathon MERN Boilerplate
+# HCM Lite
 
-A small starter for hackathon projects.
+HCM Lite is a small human capital management app for a single company: first-run setup, company rules, departments and designations, employee records with CSV import, daily attendance with corrections, leave with balances and approvals, monthly payroll with locked payslips and PDFs, three role dashboards, an audit trail and an AI assistant that answers from the company's own data through role-scoped tools. An admin, HR users and employees each see only what their role and their own record allow.
 
-- `server/` is an Express 4 + Mongoose API with JWT access tokens, rotating refresh tokens in an httpOnly cookie, Zod validation, rate limits and an admin role. It also has nine digit public uids, Google and Facebook sign-in, Cloudinary avatars, OTP password reset and an optional AI Buddy with provider key rotation.
-- `client/` is a Vite + React 18 single-page app with a complete auth flow and one working CRUD module (items) that serves as the template for new modules.
+## Stack
 
-The client never stores tokens in web storage. The access token lives in memory only; the refresh token lives in an httpOnly cookie scoped to `/api/auth`.
+- **Server**: Node.js (ES modules), Express 4, Mongoose 8, MongoDB Atlas or local MongoDB, Zod, JWT, bcryptjs, helmet, express-rate-limit, multer, csv-parse, pdfkit.
+- **Client**: Vite 8, React 18, React Router 6, Tailwind CSS 3.4, axios, recharts, react-markdown with remark-gfm, lucide-react, react-hot-toast.
+- **AI**: Gemini for native tool calling, and any OpenAI-compatible endpoint (Groq, xAI) through one adapter. Keys live encrypted in the database and rotate on failure.
+- **Tests**: `node:test` unit tests plus two dependency-free check scripts.
 
-## Requirements
+## Architecture in short
 
-- Node.js 22 LTS or newer (Vite 8 requires Node 20.19+ or 22.12+)
-- npm 10 or newer
-- A MongoDB database: MongoDB Atlas (free tier is enough) or a local `mongod`
+- `server/src/routes` declares who may call what (`protect`, `restrictTo`), `validators` shape the input with Zod, `controllers` read the request and return `{ success, data }`.
+- `server/src/services` holds every business rule. Payroll, attendance, leave, analytics and the AI tools all read the same services, so a number on a dashboard matches the same number in an answer or a payslip.
+- `client/src/pages` composes shared components from `client/src/components`; `client/src/api` is one module per resource; `client/src/hooks` holds the request, chat and confirm hooks.
+- Settings are a singleton document; business dates are `YYYY-MM-DD` strings in the company timezone; money is a PKR number rounded once on the server.
+- `scripts/` holds the demo run, the role matrix and the guarded database reset.
 
-## Quick start
+## Run it locally (under 10 minutes)
 
-```bash
-npm run install:all
-```
+1. **Install**
+   ```bash
+   npm run install:all
+   ```
+2. **Configure the API**
+   ```bash
+   cp server/.env.example server/.env
+   ```
+   Fill `MONGODB_URI` (local `mongodb://127.0.0.1:27017/hcm_dev` or an Atlas string), and generate the secrets:
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"   # JWT_ACCESS_SECRET
+   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"   # JWT_REFRESH_SECRET
+   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"   # JWT_RESET_SECRET
+   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"   # AI_KEY_SECRET (64 hex chars)
+   ```
+3. **Start both apps**
+   ```bash
+   npm run dev
+   ```
+   The API listens on `http://localhost:5000`, the client on `http://localhost:5173` and proxies `/api` to the API.
+4. **Open the app** at `http://localhost:5173`. The first visit shows the setup screen: company name, admin name, admin email and a password of 8 or more characters. Setup signs the admin in and seeds the four leave types.
+5. **Or skip the screen** by setting `ADMIN_EMAIL`, `ADMIN_PASSWORD` and `COMPANY_NAME` in `server/.env`: the admin is created at start when no admin exists, and `/setup` then reports the setup as complete.
 
-Create `server/.env` from the template and fill in the values:
-
-```bash
-cp server/.env.example server/.env
-```
-
-At minimum set `MONGODB_URI`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `JWT_RESET_SECRET` and `AI_KEY_SECRET`. Each secret in the first group must be at least 32 characters; `AI_KEY_SECRET` must be 64 hex characters.
-
-Generate two secrets with:
-
-```bash
-node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
-```
-
-Create the admin account from `ADMIN_EMAIL` and `ADMIN_PASSWORD`:
-
-```bash
-npm run seed --prefix server
-```
-
-Start the API and the client together:
-
-```bash
-npm run dev
-```
-
-- Client: http://localhost:5173
-- API: http://localhost:5000
-- Health: http://localhost:5173/api/health (through the Vite proxy)
-
-If your shell already exports `PORT`, the server may pick it up. Prefix the command with a valid port to be explicit: `PORT=5000 npm run dev`.
+After setup, create a department, a designation, an HR login (the temporary password is shown once), then employees. An HR account must change its temporary password on first sign-in, and so must every employee.
 
 ## Environment variables
 
 ### server/.env
 
-| Variable | Required | Default | Purpose |
+| Variable | Required | Default | Meaning |
 | --- | --- | --- | --- |
-| `NODE_ENV` | No | `development` | `development` or `production`. Production enables secure cookies and disables request logging. |
-| `PORT` | No | `5000` | HTTP port the API listens on. |
-| `MONGODB_URI` | Yes | none | MongoDB connection string, for example `mongodb+srv://user:pass@cluster.mongodb.net/hackathon`. |
-| `JWT_ACCESS_SECRET` | Yes | none | Access token signing secret, minimum 32 characters. |
-| `JWT_REFRESH_SECRET` | Yes | none | Refresh token signing secret, minimum 32 characters. Use a different value from the access secret. |
-| `ACCESS_TOKEN_TTL` | No | `15m` | Access token lifetime (any `jsonwebtoken` duration string). |
-| `REFRESH_TOKEN_TTL_DAYS` | No | `7` | Refresh token and cookie lifetime in days. |
-| `CLIENT_URL` | No | `http://localhost:5173` | Allowed CORS origin. Comma-separate multiple origins. |
-| `COOKIE_SAMESITE` | No | `lax` | `lax`, `strict` or `none`. Use `none` when the browser calls the API on a different site than the client. |
-| `TRUST_PROXY_HOPS` | No | `1` | How many proxies sit in front of the API for rate-limit addressing. Use `1` on Railway alone and `2` when a Vercel rewrite forwards to Railway. |
-| `SELF_URL` | No | empty | Public API URL used by the keep-alive pinger, for example `https://api-production.up.railway.app`. |
-| `KEEP_ALIVE_MINUTES` | No | `4` | Interval for the internal keep-alive request when `SELF_URL` is set in production. |
-| `ADMIN_EMAIL` | No | empty | Email for the seeded admin. The seed script is idempotent and promotes an existing user. |
-| `ADMIN_PASSWORD` | No | empty | Password for the seeded admin, 8 to 72 bytes. |
-| `JWT_RESET_SECRET` | Yes | none | Secret for code hashes and password reset tokens, minimum 32 characters. |
-| `EMAIL_VERIFICATION_REQUIRED` | No | `true` | `false` verifies new password accounts during register and returns a session, for when email delivery is not ready. |
-| `GOOGLE_CLIENT_ID` | No | empty | Google OAuth client ID. Without it `POST /api/auth/google` answers 503. |
-| `FACEBOOK_APP_ID` | No | empty | Facebook app ID. Without it, or without `FACEBOOK_APP_SECRET`, `POST /api/auth/facebook` answers 503. |
-| `FACEBOOK_APP_SECRET` | No | empty | Facebook app secret, used to debug the access token. Never sent to the client. |
-| `CLOUDINARY_CLOUD_NAME` | No | empty | Cloudinary cloud name for avatars. The three Cloudinary values are needed together. |
-| `CLOUDINARY_API_KEY` | No | empty | Cloudinary API key. |
-| `CLOUDINARY_API_SECRET` | No | empty | Cloudinary API secret. |
-| `RESEND_API_KEY` | No | empty | Resend API key for reset and verification emails. Without it in development the code is printed to the server console. |
-| `MAIL_FROM` | No | `onboarding@resend.dev` | Sender address for reset and verification emails. |
-| `AI_KEY_SECRET` | Yes | none | 64 hex characters. Encrypts stored AI provider keys. |
-| `AI_COOLDOWN_SECONDS` | No | `60` | Cooldown after a provider 429, 5xx, timeout or network error. |
-| `GEMINI_API_KEY_1`, `GEMINI_API_KEY_2` | No | empty | Default Gemini keys. Each boot adds the ones the database does not already hold, so adding a key here works on the next restart. Removing one here does not delete it. |
-| `GROK_API_KEY_1`, `GROK_API_KEY_2` | No | empty | Seed keys for the OpenAI-compatible provider. Accepts a Groq key (`gsk_`) or an xAI key (`xai-`); all of them must use one vendor. |
+| `NODE_ENV` | no | `development` | `production` turns on secure cookies and hides internal error text. |
+| `PORT` | no | `5000` | API port. |
+| `MONGODB_URI` | yes | - | MongoDB connection string, including the database name. |
+| `JWT_ACCESS_SECRET` | yes | - | 32+ characters, signs the 15 minute access token. |
+| `JWT_REFRESH_SECRET` | yes | - | 32+ characters, signs the 7 day refresh token. |
+| `JWT_RESET_SECRET` | yes | - | 32+ characters, signs the password reset token. |
+| `ACCESS_TOKEN_TTL` | no | `15m` | Access token lifetime. |
+| `REFRESH_TOKEN_TTL_DAYS` | no | `7` | Refresh token lifetime in days. |
+| `CLIENT_URL` | no | `http://localhost:5173` | Allowed browser origin(s), comma separated. |
+| `COOKIE_SAMESITE` | no | `lax` | `lax`, `strict` or `none` for the refresh cookie. |
+| `TRUST_PROXY_HOPS` | no | `1` | How many proxies in front of the API; use `2` behind a Vercel rewrite plus Railway. |
+| `SELF_URL` | no | - | Public API URL; enables the production keep-alive ping. |
+| `KEEP_ALIVE_MINUTES` | no | `4` | Minutes between keep-alive pings. |
+| `COMPANY_NAME` | no | `My Company` | Used when the admin is created from the environment. |
+| `ADMIN_EMAIL` | no | - | Creates the admin at start when no admin exists. |
+| `ADMIN_PASSWORD` | no | - | Password for that admin, 8+ characters. |
+| `RESEND_API_KEY` | no | - | Sends password reset mail; without it the code is printed in the development log. |
+| `MAIL_FROM` | no | `onboarding@resend.dev` | Sender address. |
+| `AI_KEY_SECRET` | yes | - | Exactly 64 hex characters, encrypts stored provider keys with AES-256-GCM. |
+| `AI_COOLDOWN_SECONDS` | no | `60` | Cooldown for a key that hit a rate limit. |
+| `GEMINI_API_KEY_1`, `GEMINI_API_KEY_2` | no | - | Gemini keys, seeded on the first start of an empty database. |
+| `GROK_API_KEY_1`, `GROK_API_KEY_2` | no | - | OpenAI-compatible keys. The prefix picks the vendor: `gsk_` is Groq, `xai-` is xAI. |
+| `AI_API_KEY` | no | - | One key instead of the numbered variables, with its vendor in `AI_PROVIDER`. |
+| `AI_PROVIDER` | no | `gemini` | Vendor of `AI_API_KEY`: `gemini`, `groq` or `xai`. |
 
-### client/.env
+### client/.env (optional)
 
-| Variable | Required | Default | Purpose |
-| --- | --- | --- | --- |
-| `VITE_API_URL` | No | `/api` | API base URL. It must be a path such as `/api`, because the browser then calls the page's own origin and the dev proxy or the Vercel rewrite forwards it. An absolute URL is ignored: it would make every request cross-origin, where the response is blocked unless the origin is in `CLIENT_URL` and the refresh cookie is never sent. |
-| `VITE_GOOGLE_CLIENT_ID` | No | empty | Shows the Google buttons on Login and Register. Use the same client id as `GOOGLE_CLIENT_ID`; without it the pages show the plain form. |
-| `VITE_FACEBOOK_APP_ID` | No | empty | Shows the Facebook button under the Google button on Login and Register. Use the same app id as `FACEBOOK_APP_ID`; without it the button is hidden. |
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `VITE_API_URL` | `/api` | API path on the page origin. Absolute URLs are ignored so requests stay same origin. |
+| `VITE_PROXY_TARGET` | `http://localhost:5000` | Where the dev server forwards `/api`. |
 
-`client/.env` is optional. The defaults work for local development and for the Vercel rewrite.
+## Configure the AI assistant
 
-## Scripts
+The assistant is optional. Without a key the app works and the assistant says it is unavailable; `demo:check` skips the AI steps.
 
-Run from the repository root:
+1. **One key from the environment.** Set `AI_API_KEY` and `AI_PROVIDER` (`gemini`, `groq` or `xai`), or set the numbered variables. The first start of an empty database imports those keys into the encrypted key store and picks the matching base URL and default model.
+2. **More keys from the UI.** Sign in as the admin and open **AI keys**. Add a key with its provider and an optional label, test it, disable it, or delete it. Keys are encrypted with `AI_KEY_SECRET` and never returned; only a masked tail is shown.
+3. **Rotation.** The pool claims the least recently used enabled key of the default provider, and rotates to the next key when one is rate limited, times out or fails. An invalid key is disabled, a temporary failure cools the key down for the retry window or `AI_COOLDOWN_SECONDS`, and a request the provider rejects stops the rotation with the reason recorded. The default provider, the two models, the base URLs and the system prompt are editable on the same screen; the environment key is imported only when the database holds no key at all, so an admin edit survives a restart.
+4. **Costs.** Each user gets 20 AI requests per hour across all AI routes, one request may make at most four model calls within 15 seconds, and every call is logged in `AiLog` with its tool names, status and latency.
 
-| Command | Effect |
-| --- | --- |
-| `npm run install:all` | Installs root, server and client dependencies. |
-| `npm run dev` | Runs the API and the Vite dev server together with `concurrently`. |
-| `npm run build` | Builds the client into `client/dist`. |
-| `npm start` | Starts the API in the current `NODE_ENV`. |
+## Deploy
 
-Server (`npm run <script> --prefix server`):
+### Frontend on Vercel
 
-| Script | Effect |
-| --- | --- |
-| `dev` | `nodemon src/index.js`, restarts on change. |
-| `start` | `node src/index.js`, used by Railway. |
-| `seed` | Creates or promotes the admin account, then exits. |
-
-Client (`npm run <script> --prefix client`):
-
-| Script | Effect |
-| --- | --- |
-| `dev` | Vite dev server on port 5173 with the `/api` proxy to port 5000. |
-| `build` | Production build into `dist`. |
-| `preview` | Serves the built files locally. |
-
-## Deployment
-
-### 1. MongoDB Atlas
-
-1. Create a free M0 cluster and a database user with read and write access.
-2. Under Network Access, add `0.0.0.0/0`. This is acceptable for a hackathon and should be tightened for anything long-lived.
-3. Copy the connection string, add a database name (for example `hackathon`) and use it as `MONGODB_URI`.
-
-### 2. Railway for the API
-
-1. Create a new project and deploy this repository.
-2. Set the service root directory to `server`.
-3. Set the start command to `npm start`. Railway runs the install step for the service automatically.
-4. Set the health check path to `/api/health`.
-5. Turn Serverless OFF in the service settings. The keep-alive and the in-process rate limiter expect a long-running process.
-6. Add environment variables:
-   - `NODE_ENV=production`
-   - `PORT=5000` (Railway injects `PORT`; the server reads it)
-   - `MONGODB_URI`
-   - `JWT_ACCESS_SECRET`
-   - `JWT_REFRESH_SECRET`
-   - `ACCESS_TOKEN_TTL=15m`
-   - `REFRESH_TOKEN_TTL_DAYS=7`
-   - `CLIENT_URL=https://your-app.vercel.app`
-   - `COOKIE_SAMESITE=none` when the client calls the API directly on a different site; keep `lax` when all API traffic goes through the Vercel proxy
-   - `TRUST_PROXY_HOPS=2` when the Vercel rewrite forwards to Railway; keep `1` when the browser calls Railway directly
-   - `SELF_URL=https://your-service.up.railway.app`
-   - `KEEP_ALIVE_MINUTES=4`
-   - `ADMIN_EMAIL`, `ADMIN_PASSWORD` (then run the seed once)
-   - `JWT_RESET_SECRET`, `AI_KEY_SECRET`
-   - `GOOGLE_CLIENT_ID`, `FACEBOOK_APP_ID`, `FACEBOOK_APP_SECRET`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `RESEND_API_KEY`, `MAIL_FROM` when those features are used
-   - `GEMINI_API_KEY_*`, `GROK_API_KEY_*`, `AI_COOLDOWN_SECONDS` when AI Buddy is used
-7. Deploy, open `/api/health` and confirm `db` is `connected`.
-
-### 3. Vercel for the client
-
-1. Import the repository and set the project root directory to `client`.
+1. Import the repository, set **Root Directory** to `client`.
 2. Framework preset: Vite. Build command `npm run build`, output directory `dist`.
-3. `client/vercel.json` already forwards API calls to the deployed API. Update the destination there if the Railway service moves:
+3. `client/vercel.json` already rewrites `/api/:path*` to the backend and everything else to `index.html`. Change the destination to your own Railway URL.
+4. No frontend environment variables are needed; the client calls `/api` on its own origin.
 
-   ```json
-   {
-     "rewrites": [
-       { "source": "/api/:path*", "destination": "https://your-service.up.railway.app/api/:path*" },
-       { "source": "/(.*)", "destination": "/index.html" }
-     ]
-   }
-   ```
+### Backend on Railway
 
-   The first rewrite proxies API calls so the browser sees one origin. The second rewrite makes client-side routes work on refresh. A 502 from `/api/*` means the destination host is down or wrong, because requests never reach Express.
-4. Leave `VITE_API_URL` unset, or set it to `/api`. The client ignores absolute values, so a stale Railway URL in the project settings cannot turn API calls cross-origin.
-5. Deploy and test register, login, a page reload while signed in, and logout on the deployed domain.
-6. Add the Vercel domain to `CLIENT_URL` in Railway only when the browser calls the API directly. Through the rewrite the app's own origin is used, so CORS headers are not needed.
+1. New service from the same repository, **Root Directory** `server`, start command `npm start`.
+2. Add every variable from the server table, including `NODE_ENV=production`, `TRUST_PROXY_HOPS=2` (the Vercel rewrite is one hop and Railway's edge is the second) and `CLIENT_URL` set to the Vercel URL.
+3. Set `SELF_URL` to the Railway URL so the keep-alive ping and the health route keep the free instance warm. `GET /api/health` is public and outside the rate limiter.
+4. In MongoDB Atlas allow `0.0.0.0/0` in Network Access (Railway egress addresses vary) and create a database user with read/write on the database in `MONGODB_URI`.
 
-### 4. Keep-alive
+### Submission
 
-Free MongoDB Atlas clusters and free Railway services sleep when idle. Two layers keep the API warm:
+- Commit `.env.example` files only. `git ls-files` must show no real `.env`; the root `.gitignore` covers them.
+- Keep the hosted database empty before judging: `npm run demo:check` refuses to run when setup is complete, which is the guard against seeding the judge copy.
 
-- Internal: with `SELF_URL` set and `NODE_ENV=production`, the server requests `${SELF_URL}/api/health` every `KEEP_ALIVE_MINUTES` minutes.
-- External: create a monitor in cron-job.org or UptimeRobot that requests `https://your-service.up.railway.app/api/health` every 5 minutes and alerts on a non-200 response.
+## Checks
 
-`/api/health` is intentionally outside the global rate limiter so monitors do not exhaust it.
+```bash
+npm test --prefix server                 # 85 unit tests: dates, money, attendance, leave, payroll, analytics, AI, passwords
+npm run build                            # client production build, no warnings
+npm run demo:check                       # the five minute demo against BASE_URL (default http://localhost:5000/api)
+npm run rbac:check                       # every route as admin, HR, employee and anonymous, plus object scope and a secret scan
+npm run db:reset hcm_test                # drops one database, and only when the name matches MONGODB_URI
+```
 
-### SnapDeploy free tier
+- `BASE_URL` points either script at another server, for example `BASE_URL=http://localhost:5066/api npm run demo:check`.
+- `demo:check` needs an app with no setup yet. It prints `PASS`, `FAIL` or `SKIPPED` per step and exits 1 on any failure; AI steps are `SKIPPED` when no key is configured.
+- `rbac:check` runs after `demo:check` on the same database, because it signs in as the demo accounts it created.
+- The automated checks use a database named `hcm_test`; local work uses `hcm_dev`. Drop the test database when finished.
 
-- Root directory: `server`. Point the service at the API folder, not the repository root.
-- Start command: `npm start`. There is no build step for the API; leave the build command empty.
-- Turn auto deploy off and redeploy by hand, so a half-finished commit never reaches the demo.
-- Health check path: `/api/health`. Turn serverless mode off for the same reason as Railway: the in-process rate limiter and keep-alive expect one long-running process.
+## Functionalities
 
-## AI assistant
+| # | Functionality | Where | Done |
+| --- | --- | --- | --- |
+| 1 | First-run setup with company and admin | `pages/Setup.jsx`, `setupService.js` | Done |
+| 2 | Company rules: timezone, office hours, grace, half day, weekend, office location and radius, weekly hours | `components/organization/CompanySettings.jsx` | Done |
+| 3 | Departments | `components/organization/DepartmentsPanel.jsx` | Done |
+| 4 | Designations | `components/organization/DesignationsPanel.jsx` | Done |
+| 5 | Leave types with quota and paid flag | `components/organization/LeaveTypesPanel.jsx` | Done |
+| 6 | Holidays | `components/organization/HolidaysPanel.jsx` | Done |
+| 7 | Admin creates HR logins with a one time password | `pages/AdminUsers.jsx`, `components/users/CreateHrModal.jsx` | Done |
+| 8 | Activate, deactivate and reset a login | `pages/AdminUsers.jsx` | Done |
+| 9 | Employee registration | `pages/Employees.jsx`, `components/employees/EmployeeFormModal.jsx` | Done |
+| 10 | Employee list with search, department, designation and status filters | `pages/Employees.jsx` | Done |
+| 11 | Employee 360: profile, attendance, leave, payslips | `pages/EmployeeDetail.jsx` | Done |
+| 12 | Salary update with a gross preview | `components/employees/SalaryModal.jsx` | Done |
+| 13 | Employee CSV import with a dry run, export and template | `components/employees/ImportCsvModal.jsx` | Done |
+| 14 | Check-in and check-out with optional location | `components/attendance/CheckInPanel.jsx` | Done |
+| 15 | Attendance board and corrections inbox | `pages/AttendanceBoard.jsx` | Done |
+| 16 | Correction request and decision | `components/attendance/CorrectionRequestModal.jsx`, `CorrectionDecisionModal.jsx` | Done |
+| 17 | My attendance calendar, month summary and own check-in | `pages/MyAttendance.jsx`, `components/attendance/AttendanceCalendar.jsx` | Done |
+| 18 | Leave balance, live preview, application and an AI draft from plain words | `pages/MyLeave.jsx`, `components/leave/LeaveRequestForm.jsx`, `SmartLeaveBox.jsx` | Done |
+| 19 | Leave approvals with comments and notifications | `pages/LeaveRequests.jsx`, `components/leave/LeaveDecisionModal.jsx` | Done |
+| 20 | Payroll draft creation and recalculation | `pages/Payroll.jsx` | Done |
+| 21 | Payroll finalization that locks the month | `pages/PayrollRun.jsx` | Done |
+| 22 | Payslips with the full breakdown and a PDF | `pages/MyPayslips.jsx`, `components/payroll/PayslipDrawer.jsx` | Done |
+| 23 | Admin dashboard: headcount, attrition, payroll cost, salaries, gender, tenure, audit feed | `components/dashboard/AdminDashboard.jsx` | Done |
+| 24 | HR dashboard: today, pending approvals, trend, absenteeism, leave, late-comers, own check-in | `components/dashboard/HrDashboard.jsx` | Done |
+| 25 | Employee dashboard: my day, hours against target, late count, balances, last payslip, announcements | `components/dashboard/MyDay.jsx` | Done |
 
-The API ships a tool-calling assistant instead of a plain chat. Every answer about company data comes from a tool that reads the same services as the dashboards, so numbers cannot drift between the assistant and a report.
+Also built: the assistant panel on every page with role-scoped tools and Roman Urdu, the dashboard summary card with a rule-based fallback, announcements, the notification bell, the audit log screen, AI key management with rotation, and the read-only payslip PDF.
 
-- `POST /api/ai/chat { message, conversationUid? }` runs the loop: system prompt, tools for the role, tool results fed back, at most four model calls and 15 seconds. The reply carries `toolsUsed` and `aiGenerated`.
-- Tools by role: Admin and HR get headcount, attendance summary, late comers, leave summary, payroll summary and employee search; everyone signed in also gets their own leave balance, attendance and last payslip. Employees get only the own-data tools, and no tool returns another person's salary.
-- `POST /api/ai/dashboard-summary` builds the KPI JSON on the server for the caller's role and filters and asks for 3 to 5 bullets, with rule-based bullets as the fallback.
-- `POST /api/ai/smart-leave { message }` turns a sentence such as "next Monday and Tuesday off for my sister's wedding" into a leave type and dates, then checks them against the real leave rules. Nothing is saved.
-- Policy answers come from text generated from the live settings and leave types, so changing the office start, the grace period or a leave quota changes the answers.
-- Keys and models live at `/api/admin/ai`. `AI_API_KEY` and `AI_PROVIDER` still seed the first key on an empty database, and the assistant is limited to 20 requests per user per hour.
+## Bonus items
 
-## Project documentation
-
-- `docs/ARCHITECTURE.md`: file tree, request flow, auth flow, API contract and recipes for new modules.
-- `theme.md`: design tokens, typography, component and copy rules.
-- `knowledge.md`: compact orientation for coding agents.
-
-## Troubleshooting
-
-| Symptom | Cause and fix |
+| Item | State |
 | --- | --- |
-| `vite: not found` on deploy | The service is building the client folder without installed dependencies. Run the build for the `client` root with `npm ci` first, or build locally and publish `dist`. |
-| `npm error ... package.json` under `/app/server` | The service root directory is wrong. Set it to the repository root for the monorepo, or to `server` when the service only runs the API. |
-| `Invalid environment configuration` | A required variable is missing or too short. The server prints the field names in the log. |
-| `MongooseServerSelectionError` or Atlas could not connect | Add the host to Atlas Network Access and confirm the database user can read and write the database in `MONGODB_URI`. |
-| CORS error in the console (`No 'Access-Control-Allow-Origin' header`) | The page is calling the API on another origin. Keep `VITE_API_URL=/api` so the dev proxy or the Vercel rewrite forwards the call, or add the page's origin to `CLIENT_URL` when the browser must reach the API directly. |
-| `[GSI_LOGGER]: The given origin is not allowed for the given client ID` | Google sign-in only runs on origins listed on the OAuth client. In Google Cloud Console, edit the web client behind `VITE_GOOGLE_CLIENT_ID` and add each exact origin with no path, for example `https://your-app.vercel.app` and `http://localhost:5173`. The client id must equal `GOOGLE_CLIENT_ID` on the API. |
-| Signed out after every request | The refresh cookie is not reaching the API. Check `COOKIE_SAMESITE`, that the request uses `credentials`, and that the client and API share a site or the client proxies `/api`. |
-| `429 Too many requests` | The login limiter allows 20 failed attempts per 15 minutes per IP; the global limiter allows 300 API requests per 15 minutes per IP; the reset routes allow 10 per 15 minutes per IP; the assistant allows 20 requests per user per hour across its chat, summary and smart leave routes. Behind two proxies set `TRUST_PROXY_HOPS=2`, otherwise every visitor shares the proxy's bucket. |
-| The assistant answers `503 The assistant is not available right now. Please try again in a minute.` | The pool had nothing that could answer, the provider timed out, or every attempt failed. The response `code` says which: `ai_no_active_keys` means no key was available at all (none stored, or all disabled, invalid or cooling down), `ai_keys_failed` means keys were tried and each one failed, `ai_timeout` means the 15 second budget ran out. The boot log reports how many keys were imported from the environment. Check `GET /api/admin/ai/keys` as an admin for the per-key `lastError`. |
+| AI assistant with real tool calling over the company data, restricted by role | Done |
+| Several AI keys with rotation, cooldown, encryption and a usage log | Done |
+| Dashboard summary generated by the model, with a deterministic fallback | Done |
+| Smart leave in plain English or Roman Urdu | Done |
+| Payslip PDF streamed with the same role and scope checks as the JSON | Done |
+| CSV import with a dry run and a per-row error report | Done |
+| Append-only audit log that rejects updates and deletes | Done |
+| Geofenced camera check-in (`source: "camera"` with face count, accuracy and radius) | API only, no camera capture UI |
+| Email delivery | Through Resend when `RESEND_API_KEY` is set, otherwise the reset code is printed in development |
+
+## Known limitations and design decisions
+
+- **One company, one timezone.** `settings.timezone` is the company calendar; the server itself runs in UTC and never derives a business date from a local `Date` getter.
+- **Check-in is allowed on weekends and holidays.** The record is stored but off days are left out of every rate and out of payroll, so a demo on a Saturday still works.
+- **HR cannot decide its own requests and cannot change its own salary.** The admin decides requests and salaries that belong to HR employees, so nobody is blocked.
+- **No photo is stored.** The camera path sends a face count and an accuracy, not an image.
+- **Payslip snapshot.** A payslip keeps a copy of the numbers and of the employee name, code, department and designation, so later edits never change history.
+- **Payroll runs show the finalized date but not who finalized it.** The server stores the user id and does not populate the name.
+- **Leave filters use the employee id.** The server filters by `employeeId`, so the screen offers a select of people instead of a name search.
+- **Attendance board summary reads the first 100 employees.** The table pages at 10; the summary strip is capped at 100.
+- **Employees see times in the device timezone.** `GET /settings` is limited to admin and HR, so the personal screens fall back to the browser zone.
+- **`POST /ai/smart-leave` takes `message`** (the server also accepts `text`), and `POST /ai/chat` accepts `conversationId`.
+- **The database reset refuses an unknown name**, so a typo cannot drop the wrong database.
+- **`client/vercel.json` points at the boilerplate Railway URL** until you set your own.
+
+## Judge quick start
+
+1. Open the live link.
+2. Complete the first-run setup (company name, admin name, email, password).
+3. Open **Organization** and add a department, a designation and (optionally) a holiday.
+4. Open **Users** and create an HR login; copy the temporary password.
+5. Sign in as HR (change the password), then register two or three employees.
+6. Sign in as one employee, check in, request leave; sign back in as HR to approve it.
+7. Create the payroll draft for this month as HR, finalize it as the admin, then download the payslip as the employee.
+8. Ask the assistant "How many active employees do we have?" and "Who is on leave today?"; both answers come from the same services the dashboard uses.

@@ -2,7 +2,7 @@
 
 The repository is a two-app monorepo: an Express API in `server/` and a React single-page app in `client/`. The root `package.json` only orchestrates install, dev, build and start. The client talks to the API over HTTP.
 
-The API is the HCM Lite backend. It covers first-run setup, company settings, organization data, accounts, employees, attendance, leave, payroll, analytics dashboards, the AI assistant, announcements, notifications and the audit trail. The client is still the boilerplate app until the frontend prompts replace it.
+The API is the HCM Lite backend. It covers first-run setup, company settings, organization data, accounts, employees, attendance, leave, payroll, analytics dashboards, the AI assistant, announcements, notifications and the audit trail. The client is the full interface for the same features, one screen per module, with the assistant panel available on every page.
 
 ## File tree
 
@@ -17,7 +17,11 @@ The API is the HCM Lite backend. It covers first-run setup, company settings, or
 ├── docs/
 │   ├── ARCHITECTURE.md            This document
 │   └── VIVA.md                    Plain-language flow walkthrough and review questions
-├── client/                        React app from the boilerplate, replaced by the frontend prompts
+├── scripts/
+│   ├── demo-check.mjs             The five minute demo against a running API
+│   ├── rbac-matrix.mjs            Every route as each role, scope checks and a secret scan
+│   └── reset-db.js                Drops one database, only when the name matches
+├── client/                        React single page app (see Client app below)
 └── server/
     ├── package.json               Dependencies and the dev, start, seed and test scripts
     ├── .env.example               Environment template
@@ -230,8 +234,11 @@ The API is the HCM Lite backend. It covers first-run setup, company settings, or
 
 - Every model call goes through `aiKeyPool.callWithPool`, so key rotation, cooldown and timeout handling apply inside the tool loop as well.
 - `aiAssistant.runChat({ user, message, conversation, now })` builds the system prompt, sends the tools allowed for the role, executes the requested tools and feeds the results back. It stops when the model answers with text, after four model calls, or at the 15 second budget. The fourth call carries no tools, so the model has to answer in text.
+- `aiSetup.envKeys()` reads the numbered variables in order (`GEMINI_API_KEY_1`, `GEMINI_API_KEY_2`, `GROK_API_KEY_1`, `GROK_API_KEY_2`), plus `AI_API_KEY` with `AI_PROVIDER` as its vendor. A grok key is stored as provider `grok` and its vendor comes from the prefix: `gsk_` is Groq, `xai-` is xAI. The vendor decides the base URL and the default model. Keys are imported only while the database holds none at all, and the settings document is seeded with one base URL for the whole grok pair.
+- The Gemini adapter sends each tool call's `thoughtSignature` back on the next turn, because Gemini 3 rejects a tool conversation without it. Both adapters pass tool results as JSON text, which is what the OpenAI shape carries.
 - `aiTools` holds one definition per tool: a plain JSON Schema for the provider and a Zod schema for validation. `toolsForRole` is the whole role scope: Admin and HR get the six org tools plus the three own-data tools, employees get only the own-data tools. `executeTool` rejects a name outside the role scope with `{ error: "unknown_tool" }` before any query runs, so an employee naming `get_headcount` gets nothing. Invalid arguments come back as `{ error: "invalid_arguments" }` and a failing tool as `{ error: "unavailable" }`, so the model can recover instead of the request failing.
 - Tools call the same services as the dashboards (`analyticsService`, `leaveService`, `attendanceService`, `payrollService`), so a chat answer and a dashboard card always come from one calculation. No tool returns another person's salary; `search_employees` returns name, code, department, designation and status only.
+- A model fills an optional argument it has nothing for with `null` or `""`. Every tool schema rejects a blank value, so `executeTool` drops blanks before validation and the call runs as if the argument were absent. A model may also answer a leave type with the name it saw (`"Casual"`), so `smartLeaveSchema` trims and lowercases the code before matching.
 - The system prompt is rebuilt per request from the live settings and leave types: office start and grace, half day, weekend days, quotas, leave and correction rules, payroll formula and tax slabs, and who may do what. A settings change therefore changes the answers.
 - `POST /ai/dashboard-summary` builds the KPI JSON on the server with `dashboardService` for the caller's role and filters, asks for `{ bullets }` (3 to 5 short strings), validates with Zod and retries once. When the model fails or the JSON is invalid, it returns rule-based bullets from the same KPIs with `fallback: true`.
 - `POST /ai/smart-leave` sends the next 35 days as a calendar table (`YYYY-MM-DD Monday working` / `... Saturday off`), the leave type codes and the matching rules. The model returns `{ type, startDate, endDate, reason }`, which is validated, then checked with the real leave preview for the working-day count and balance. Nothing is saved.
@@ -327,7 +334,48 @@ Delete the model, validator, controller, service and route files, then remove th
 
 ### Frontend
 
-The client is rewritten by the frontend prompts. Until then, follow the existing client conventions in `knowledge.md` when touching it.
+1. Add the calls to a module in `client/src/api`, unwrapping `response.data.data`.
+2. Build the page in `client/src/pages` from the shared components: `PageHeader`, `FilterBar`, `DataTable`, `Card`, `StatCard`, `ChartCard`, `Modal`, `Button`, `StatusBadge`. No raw `table`, `dialog`, `select` or `button` in a page.
+3. Give the page its loading, empty and error states through `useResource` and `DataTable`.
+4. Register the route in `client/src/App.jsx` inside the right `ProtectedRoute roles={[...]}` group and add the menu entry in `client/src/config/menus.js`.
+5. Format money with `formatMoney`, instants with `formatTime` or `formatDateTimeIn` and business dates with `formatDate`, all from `client/src/lib/format.js`.
+
+## Client app
+
+```
+client/src/
+├── App.jsx                  Route table, role guards, toaster
+├── api/                     One module per resource, plus http.js with the refresh retry
+├── components/
+│   ├── layout/              AppShell, Sidebar, Topbar, NotificationBell, UserMenu
+│   ├── data/                DataTable, FilterBar, ChartCard
+│   ├── charts/              BarChartBox, LineChartBox, PieChartBox with screen reader summaries
+│   ├── dashboard/           AdminDashboard, HrDashboard, MyDay, SummaryCard
+│   ├── payroll/             PayslipDrawer and the PDF button
+│   ├── ai/                  AssistantPanel, AssistantProvider, MessageBubble, CodeBlock, TypingIndicator
+│   ├── employees/           Form, salary, CSV import and the four 360 tabs
+│   ├── attendance/          CheckInPanel, calendar, correction modals, summary
+│   ├── leave/               Balance cards, request form, smart leave box, decision modal
+│   ├── organization/        Company settings and the four organization panels
+│   ├── users/               Create HR and the one time password dialog
+│   └── ui/                  Buttons, inputs, cards, modal, badges, states
+├── context/                 AuthContext, SetupContext, CompanyTimeContext
+├── hooks/                   useResource, useConfirm, useAssistant, useDocumentTitle, useHrEmployeeIds
+└── lib/                     errors, format, time, chart, download, navigation, validation, tokenStore
+```
+
+- `useResource(loader, deps)` gives every screen `{ data, loading, error, reload }`; a list renders `DataTable`, which owns skeletons, the empty state, the error state with retry, pagination and row clicks.
+- `Modal` opens either centred or as a right drawer (`variant="drawer"`), with the same focus trap, scroll lock, Escape handling and full screen behaviour under `md`.
+- The assistant lives once in `AppShell` through `AssistantProvider`; a page calls `useAssistantPanel().openAssistant()`. The panel, the markdown renderer and recharts are lazy loaded, which keeps the main bundle small.
+- Charts read their colours from the CSS variables through `client/src/lib/chart.js` and always carry a visually hidden text summary.
+- `formatMoney` writes the `PKR` prefix and groups thousands; `formatTime` and `formatDateTimeIn` print instants in the company timezone from `CompanyTimeContext`.
+
+## Checks
+
+- `server/test/*.test.js` with `npm test --prefix server` covers the pure rules: dates, haversine, money, temporary passwords, day derivation, attendance timing and geofence, leave, payroll, analytics, the AI policy text, the leave calendar table, the role to tool map and the summary fallback.
+- `scripts/demo-check.mjs` plays the demo and refuses to run when setup is complete, so the hosted copy stays empty.
+- `scripts/rbac-matrix.mjs` walks every route as admin, HR, employee and anonymous, then checks object scope, the setup guard, the health route and that no response carries a hash, a token or a provider key.
+- `scripts/reset-db.js` drops the database named on the command line and nothing else.
 
 ## Conventions
 

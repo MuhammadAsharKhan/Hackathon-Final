@@ -10,14 +10,22 @@ import SetupGate from "@/components/SetupGate";
 import PageLoading from "@/components/ui/PageLoading";
 import AdminUsers from "@/pages/AdminUsers";
 import Announcements from "@/pages/Announcements";
+import AttendanceBoard from "@/pages/AttendanceBoard";
 import AuditLog from "@/pages/AuditLog";
 import ChangePassword from "@/pages/ChangePassword";
-import ComingSoon from "@/pages/ComingSoon";
 import Dashboard from "@/pages/Dashboard";
+import EmployeeDetail from "@/pages/EmployeeDetail";
+import Employees from "@/pages/Employees";
+import LeaveRequests from "@/pages/LeaveRequests";
 import Login from "@/pages/Login";
+import MyAttendance from "@/pages/MyAttendance";
+import MyLeave from "@/pages/MyLeave";
+import MyPayslips from "@/pages/MyPayslips";
 import MyProfile from "@/pages/MyProfile";
 import NotFound from "@/pages/NotFound";
 import Organization from "@/pages/Organization";
+import Payroll from "@/pages/Payroll";
+import PayrollRun from "@/pages/PayrollRun";
 import Setup from "@/pages/Setup";
 
 const AdminAi = lazy(() => import("@/pages/AdminAi"));
@@ -27,44 +35,6 @@ const pageFallback = (
     <PageLoading />
   </div>
 );
-
-const LATER_SCREENS = {
-  employees: {
-    path: "/employees",
-    title: "Employees",
-    description: "People records, salary and imports.",
-  },
-  attendance: {
-    path: "/attendance",
-    title: "Attendance",
-    description: "The daily board and correction requests.",
-  },
-  leave: {
-    path: "/leave/requests",
-    title: "Leave",
-    description: "Leave requests waiting for a decision.",
-  },
-  payroll: {
-    path: "/payroll",
-    title: "Payroll",
-    description: "Monthly drafts, finalization and payslips.",
-  },
-  myAttendance: {
-    path: "/me/attendance",
-    title: "My attendance",
-    description: "Your check-ins, check-outs and corrections.",
-  },
-  myLeave: {
-    path: "/me/leave",
-    title: "My leave",
-    description: "Your balances and requests.",
-  },
-  myPayslips: {
-    path: "/me/payslips",
-    title: "My payslips",
-    description: "Finalized payslips you can download.",
-  },
-};
 
 export default function App() {
   return (
@@ -108,73 +78,22 @@ export default function App() {
                   <Route path="/admin/ai" element={<AdminAi />} />
                 </Route>
 
+                {/* The server decides who may open a record, so an employee
+                    who guesses another id gets its 403 message. */}
+                <Route path="/employees/:id" element={<EmployeeDetail />} />
+
                 <Route element={<ProtectedRoute roles={["admin", "hr"]} />}>
-                  <Route
-                    path="/employees"
-                    element={
-                      <ComingSoon
-                        title={LATER_SCREENS.employees.title}
-                        description={LATER_SCREENS.employees.description}
-                      />
-                    }
-                  />
-                  <Route
-                    path="/attendance"
-                    element={
-                      <ComingSoon
-                        title={LATER_SCREENS.attendance.title}
-                        description={LATER_SCREENS.attendance.description}
-                      />
-                    }
-                  />
-                  <Route
-                    path="/leave/requests"
-                    element={
-                      <ComingSoon
-                        title={LATER_SCREENS.leave.title}
-                        description={LATER_SCREENS.leave.description}
-                      />
-                    }
-                  />
-                  <Route
-                    path="/payroll"
-                    element={
-                      <ComingSoon
-                        title={LATER_SCREENS.payroll.title}
-                        description={LATER_SCREENS.payroll.description}
-                      />
-                    }
-                  />
+                  <Route path="/employees" element={<Employees />} />
+                  <Route path="/attendance" element={<AttendanceBoard />} />
+                  <Route path="/leave/requests" element={<LeaveRequests />} />
+                  <Route path="/payroll" element={<Payroll />} />
+                  <Route path="/payroll/:id" element={<PayrollRun />} />
                 </Route>
 
                 <Route element={<ProtectedRoute roles={["hr", "employee"]} />}>
-                  <Route
-                    path="/me/attendance"
-                    element={
-                      <ComingSoon
-                        title={LATER_SCREENS.myAttendance.title}
-                        description={LATER_SCREENS.myAttendance.description}
-                      />
-                    }
-                  />
-                  <Route
-                    path="/me/leave"
-                    element={
-                      <ComingSoon
-                        title={LATER_SCREENS.myLeave.title}
-                        description={LATER_SCREENS.myLeave.description}
-                      />
-                    }
-                  />
-                  <Route
-                    path="/me/payslips"
-                    element={
-                      <ComingSoon
-                        title={LATER_SCREENS.myPayslips.title}
-                        description={LATER_SCREENS.myPayslips.description}
-                      />
-                    }
-                  />
+                  <Route path="/me/attendance" element={<MyAttendance />} />
+                  <Route path="/me/leave" element={<MyLeave />} />
+                  <Route path="/me/payslips" element={<MyPayslips />} />
                   <Route path="/me/profile" element={<MyProfile />} />
                 </Route>
 

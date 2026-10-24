@@ -6,10 +6,11 @@ Orientation for coding agents working in this repository.
 
 HCM Lite: a human capital management app built on the hackathon MERN boilerplate. `prompts/00-SPEC.md` is the single source of truth; if code, docs or another prompt disagree with it, the spec wins.
 
-State after prompts 01, 02, 03 and 04 (foundation, people, payroll and analytics, AI assistant):
+State after prompts 01 to 08: the product is complete.
 
 - The API has first-run setup, company settings, organization data, accounts, employees, attendance, leave, payroll runs and payslips, the three dashboards, the tool-calling assistant, announcements, notifications and the audit trail.
-- The client is still the boilerplate app. The frontend prompts replace it.
+- The client covers every module: setup, organization, users, employees and the 360 view, attendance board and corrections, leave, payroll and payslips, the three dashboards, announcements, audit and AI keys, plus the assistant panel on every page.
+- `scripts/` holds the demo run (`npm run demo:check`), the role matrix (`npm run rbac:check`) and the guarded database reset (`npm run db:reset hcm_test`). `docs/VIVA.md` is the review guide.
 
 ## Stack
 
@@ -42,6 +43,9 @@ npm start                    # server only, uses NODE_ENV
 npm test --prefix server     # node:test unit tests
 npm run seed --prefix server # create the admin from the environment, then exit
 npm run build                # client production build
+npm run demo:check           # five minute demo, refuses a used database
+npm run rbac:check           # every route as each role, after demo:check
+npm run db:reset hcm_test    # drops the named database only
 ```
 
 - The client always uses port 5173 (`strictPort`). Do not read `PORT` in client code.
@@ -53,7 +57,7 @@ npm run build                # client production build
 
 Required: `MONGODB_URI`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `JWT_RESET_SECRET` (32+ characters each), `AI_KEY_SECRET` (64 hex characters).
 
-Optional: `NODE_ENV`, `PORT`, `ACCESS_TOKEN_TTL`, `REFRESH_TOKEN_TTL_DAYS`, `CLIENT_URL`, `COOKIE_SAMESITE`, `TRUST_PROXY_HOPS`, `SELF_URL`, `KEEP_ALIVE_MINUTES`, `COMPANY_NAME` (default `My Company`), `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `RESEND_API_KEY`, `MAIL_FROM`, `AI_COOLDOWN_SECONDS`, `AI_API_KEY`, `AI_PROVIDER` (`gemini`, `groq` or `xai`).
+Optional: `NODE_ENV`, `PORT`, `ACCESS_TOKEN_TTL`, `REFRESH_TOKEN_TTL_DAYS`, `CLIENT_URL`, `COOKIE_SAMESITE`, `TRUST_PROXY_HOPS`, `SELF_URL`, `KEEP_ALIVE_MINUTES`, `COMPANY_NAME` (default `My Company`), `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `RESEND_API_KEY`, `MAIL_FROM`, `AI_COOLDOWN_SECONDS`, `GEMINI_API_KEY_1`, `GEMINI_API_KEY_2`, `GROK_API_KEY_1`, `GROK_API_KEY_2`, `AI_API_KEY`, `AI_PROVIDER` (`gemini`, `groq` or `xai`).
 
 - `ADMIN_EMAIL` and `ADMIN_PASSWORD` create the admin at start when no admin exists. The setup screen does the same job without them.
 - `AI_API_KEY` seeds the first provider key only when the database holds no key at all; `AI_PROVIDER` names the vendor.

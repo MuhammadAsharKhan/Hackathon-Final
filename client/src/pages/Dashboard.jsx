@@ -1,53 +1,231 @@
+import { lazy, Suspense, useMemo, useState } from "react";
 import { LayoutDashboard } from "lucide-react";
+import MyDay from "@/components/dashboard/MyDay";
+import SummaryCard from "@/components/dashboard/SummaryCard";
+import FilterBar from "@/components/data/FilterBar";
 import Card from "@/components/ui/Card";
+import ErrorState from "@/components/ui/ErrorState";
 import EmptyState from "@/components/ui/EmptyState";
 import PageHeader from "@/components/ui/PageHeader";
-import { ROLE_LABELS } from "@/config/menus";
+import PageSection from "@/components/ui/PageSection";
+import { getAdminDashboard, getHrDashboard, getMyDashboard } from "@/api/dashboard.api";
+import { listDepartments } from "@/api/organization.api";
 import { useAuth } from "@/hooks/useAuth";
+import { useCompanyTimeZone } from "@/context/CompanyTimeContext";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { useResource } from "@/hooks/useResource";
+import { addDays, todayInZone } from "@/lib/time";
+
+// The chart library is large, so the two chart dashboards load on their own.
+const AdminDashboard = lazy(() => import("@/components/dashboard/AdminDashboard"));
+const HrDashboard = lazy(() => import("@/components/dashboard/HrDashboard"));
 
 const DESCRIPTION = {
-  admin: "Company wide totals and the audit trail.",
-  hr: "Today at a glance and the approvals waiting on you.",
+  admin: "Company wide totals, the money view and the audit trail.",
+  hr: "Today at a glance, the approvals waiting on you and your own day.",
   employee: "Your day, your leave and your latest payslip.",
 };
+
+const PERIODS = [
+  { value: "month", label: "This month" },
+  { value: "week", label: "Last 7 days" },
+  { value: "year", label: "This year" },
+];
+
+// A preset fills both dates, so the page only stores the two dates it sends.
+const rangeFor = (period, timeZone) => {
+  const today = todayInZone(timeZone);
+
+  if (period === "week") return { from: addDays(today, -6), to: today };
+  if (period === "year") return { from: `${today.slice(0, 4)}-01-01`, to: today };
+  return { from: `${today.slice(0, 7)}-01`, to: today };
+};
+
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-4" aria-busy="true">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <div key={index} className="skeleton h-24 rounded-xl" />
+        ))}
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="skeleton h-64 rounded-xl" />
+        <div className="skeleton h-64 rounded-xl" />
+      </div>
+      <span className="sr-only" role="status">
+        Loading the dashboard
+      </span>
+    </div>
+  );
+}
 
 export default function Dashboard() {
   useDocumentTitle("Dashboard");
 
-  const { user, employee } = useAuth();
+  const { user } = useAuth();
+  const timeZone = useCompanyTimeZone();
+  const role = user?.role;
+  const canFilter = role === "admin" || role === "hr";
+
+  const [period, setPeriod] = useState("month");
+  const initialRange = useMemo(() => rangeFor("month", timeZone), [timeZone]);
+  const [from, setFrom] = useState(initialRange.from);
+  const [to, setTo] = useState(initialRange.to);
+  const [departmentId, setDepartmentId] = useState("");
+
+  const { data, loading, error, reload } = useResource(() => {
+    if (role === "admin") {
+      return getAdminDashboard({
+        from,
+        to,
+        department: departmentId || undefined,
+      }).then((admin) => ({ admin }));
+    }
+
+    if (role === "hr") {
+      return Promise.all([
+        getHrDashboard({ from, to, department: departmentId || undefined }),
+        getMyDashboard(),
+      ]).then(([hr, me]) => ({ hr, me }));
+    }
+
+    return getMyDashboard().then((me) => ({ me }));
+  }, [role, from, to, departmentId]);
+
+  const { data: org } = useResource(
+    () => (canFilter ? listDepartments() : Promise.resolve(null)),
+    [canFilter]
+  );
+  const departments = org?.departments || [];
+
+  const applyPeriod = (next) => {
+    setPeriod(next);
+    const range = rangeFor(next, timeZone);
+    setFrom(range.from);
+    setTo(range.to);
+  };
 
   return (
     <div className="space-y-8">
       <PageHeader
         title="Dashboard"
-        description={DESCRIPTION[user?.role] || "Your workspace."}
+        description={DESCRIPTION[role] || "Your workspace."}
       />
 
-      <Card className="p-6">
-        <p className="text-sm text-muted-foreground">Signed in as</p>
-        <p className="mt-1 text-base font-medium">{user?.name}</p>
-        <dl className="mt-4 grid gap-4 text-sm sm:grid-cols-3">
-          <div>
-            <dt className="text-xs text-muted-foreground">Role</dt>
-            <dd className="mt-0.5">{ROLE_LABELS[user?.role] || "Signed in"}</dd>
-          </div>
-          <div>
-            <dt className="text-xs text-muted-foreground">Employee code</dt>
-            <dd className="mt-0.5 tabular-nums">{employee?.code || "-"}</dd>
-          </div>
-          <div>
-            <dt className="text-xs text-muted-foreground">Department</dt>
-            <dd className="mt-0.5">{employee?.department || "-"}</dd>
-          </div>
-        </dl>
-      </Card>
+      {canFilter ? (
+        <FilterBar
+          filters={[
+            {
+              key: "period",
+              label: "Period",
+              allLabel: "Custom range",
+              value: period,
+              onChange: applyPeriod,
+              options: PERIODS.map((item) => ({
+                value: item.value,
+                label: item.label,
+              })),
+            },
+            {
+              key: "department",
+              label: "Department",
+              allLabel: "All departments",
+              value: departmentId,
+              onChange: setDepartmentId,
+              options: departments.map((department) => ({
+                value: department.id,
+                label: department.name,
+              })),
+            },
+          ]}
+          dateRange={{
+            from,
+            to,
+            onFromChange: (value) => {
+              setFrom(value);
+              setPeriod("");
+            },
+            onToChange: (value) => {
+              setTo(value);
+              setPeriod("");
+            },
+          }}
+          onClear={() => {
+            setDepartmentId("");
+            applyPeriod("month");
+          }}
+        />
+      ) : null}
 
-      <EmptyState
-        icon={LayoutDashboard}
-        title="Dashboard metrics are not built yet"
-        description="Attendance, leave and payroll totals appear here once the dashboard endpoints are available."
-      />
+      {error ? (
+        <ErrorState
+          title="The dashboard did not load"
+          message={error}
+          onRetry={reload}
+        />
+      ) : null}
+
+      {!error && loading && !data ? <DashboardSkeleton /> : null}
+
+      {!error && data ? (
+        <>
+          {role === "admin" ? (
+            <Suspense fallback={<DashboardSkeleton />}>
+              <AdminDashboard
+                data={data.admin}
+                loading={loading}
+                error=""
+                onRetry={reload}
+                filters={{ from, to, departmentId }}
+              />
+            </Suspense>
+          ) : null}
+
+          {role === "hr" ? (
+            <>
+              <Suspense fallback={<DashboardSkeleton />}>
+                <HrDashboard
+                  data={data.hr}
+                  loading={loading}
+                  error=""
+                  onRetry={reload}
+                />
+              </Suspense>
+              <SummaryCard filters={{ from, to, departmentId }} />
+              <PageSection
+                title="My day"
+                description="Your own check-in, hours, leave and payslip."
+              >
+                <MyDay
+                  data={data.me}
+                  loading={loading}
+                  error=""
+                  onRetry={reload}
+                />
+              </PageSection>
+            </>
+          ) : null}
+
+          {role === "employee" ? (
+            <MyDay data={data.me} loading={loading} error="" onRetry={reload} />
+          ) : null}
+
+          {role === "admin" ? (
+            <SummaryCard filters={{ from, to, departmentId }} />
+          ) : null}
+
+          {!role ? (
+            <Card className="p-6">
+              <EmptyState
+                icon={LayoutDashboard}
+                title="No dashboard for this account"
+                description="Sign in with an admin, HR or employee account."
+              />
+            </Card>
+          ) : null}
+        </>
+      ) : null}
     </div>
   );
 }

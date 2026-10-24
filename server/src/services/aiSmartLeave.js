@@ -29,7 +29,13 @@ const dateSchema = z
 export const smartLeaveSchema = (codes) =>
   z
     .object({
-      type: z.enum(codes, "Unknown leave type"),
+      // Codes are stored as lowercase slugs, but a model may answer with the
+      // type name it saw ("Casual"), so the case is folded before the match.
+      type: z
+        .string()
+        .trim()
+        .toLowerCase()
+        .pipe(z.enum(codes, "Unknown leave type")),
       startDate: dateSchema,
       endDate: dateSchema,
       reason: z.string().trim().min(3, "Reason is too short").max(300, "Reason is too long"),

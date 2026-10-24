@@ -95,7 +95,12 @@ const geminiContents = (messages) =>
       const parts = [];
       if (message.content) parts.push({ text: message.content });
       for (const call of message.toolCalls ?? []) {
-        parts.push({ functionCall: { name: call.name, args: call.arguments ?? {} } });
+        parts.push({
+          functionCall: { name: call.name, args: call.arguments ?? {} },
+          // Gemini 3 rejects the next turn when a function call comes back
+          // without the signature it issued with that call.
+          ...(call.signature ? { thoughtSignature: call.signature } : {}),
+        });
       }
       return { role: "model", parts };
     }
@@ -161,6 +166,7 @@ export const askGemini = async ({
       id: `gemini-${index}`,
       name: part.functionCall.name,
       arguments: safeArguments(part.functionCall.args),
+      signature: part.thoughtSignature ?? null,
     }));
 
   return { text, toolCalls };
@@ -192,7 +198,12 @@ const openAiMessages = (systemPrompt, messages) => [
       return {
         role: "tool",
         tool_call_id: message.toolCallId,
-        content: message.content,
+        // The OpenAI shape only carries text, so a structured result is sent
+        // as its JSON string.
+        content:
+          typeof message.content === "string"
+            ? message.content
+            : JSON.stringify(message.content ?? {}),
       };
     }
 

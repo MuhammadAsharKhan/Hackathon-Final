@@ -15,8 +15,10 @@ export default function Modal({
   footer,
   className,
   dismissible = true,
+  variant = "center",
   ...props
 }) {
+  const isDrawer = variant === "drawer";
   const panelRef = useRef(null);
   const onCloseRef = useRef(onClose);
   const titleId = useId();
@@ -95,7 +97,13 @@ export default function Modal({
   if (!open) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4">
+    <div
+      className={
+        isDrawer
+          ? "fixed inset-0 z-50 flex justify-end"
+          : "fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4"
+      }
+    >
       <div
         className="animate-overlay-in overlay-backdrop absolute inset-0"
         onClick={() => {
@@ -111,7 +119,9 @@ export default function Modal({
         aria-describedby={description ? descriptionId : undefined}
         tabIndex={-1}
         className={cn(
-          "animate-panel-in relative flex max-h-[calc(100dvh-1rem)] w-full max-w-lg flex-col rounded-t-xl border border-border bg-background shadow-sm sm:max-h-[calc(100dvh-2rem)] sm:rounded-xl",
+          isDrawer
+            ? "animate-panel-in relative flex h-full max-h-dvh w-full flex-col border-l border-border bg-background shadow-sm sm:max-w-xl"
+            : "animate-panel-in relative flex max-h-[calc(100dvh-1rem)] w-full max-w-lg flex-col rounded-t-xl border border-border bg-background shadow-sm sm:max-h-[calc(100dvh-2rem)] sm:rounded-xl",
           className
         )}
         {...props}

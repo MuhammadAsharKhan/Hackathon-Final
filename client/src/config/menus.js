@@ -95,8 +95,15 @@ const PAGE_TITLES = {
   "/login": "Sign in",
 };
 
+const PREFIX_TITLES = { "/employees/": "Employee", "/payroll/": "Payroll run" };
+
 export const pageTitleFor = (pathname) => {
   if (PAGE_TITLES[pathname]) return PAGE_TITLES[pathname];
+
+  const prefix = Object.keys(PREFIX_TITLES).find((start) =>
+    pathname.startsWith(start)
+  );
+  if (prefix) return PREFIX_TITLES[prefix];
 
   const match = ALL_ITEMS.find((item) => item.to === pathname);
   return match?.label || "HCM Lite";

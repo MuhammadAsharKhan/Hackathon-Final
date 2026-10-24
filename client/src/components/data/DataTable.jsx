@@ -13,9 +13,9 @@ const SKELETON_WIDTHS = ["w-3/4", "w-1/2", "w-2/3", "w-1/3", "w-1/2", "w-2/3"];
 const cellValue = (column, row) =>
   column.render ? column.render(row) : row[column.key];
 
-function SkeletonTable({ headers }) {
+function SkeletonTable({ headers, minWidthClass }) {
   return (
-    <Table columns={headers}>
+    <Table columns={headers} minWidthClass={minWidthClass}>
       {Array.from({ length: SKELETON_ROWS }).map((_, rowIndex) => (
         <TableRow key={rowIndex}>
           {headers.map((__, cellIndex) => (
@@ -45,7 +45,9 @@ export default function DataTable({
   empty,
   pagination,
   renderExpanded,
+  onRowClick,
   className,
+  minWidthClass,
 }) {
   const [expandedId, setExpandedId] = useState(null);
   const columnCount = columns.length + (renderExpanded ? 1 : 0);
@@ -68,7 +70,7 @@ export default function DataTable({
   if (loading) {
     return (
       <div className={className} aria-busy="true">
-        <SkeletonTable headers={headers} />
+        <SkeletonTable headers={headers} minWidthClass={minWidthClass} />
         <span className="sr-only" role="status">
           Loading
         </span>
@@ -92,14 +94,17 @@ export default function DataTable({
 
   return (
     <div className={cn("space-y-4", className)}>
-      <Table columns={headers}>
+      <Table columns={headers} minWidthClass={minWidthClass}>
         {rows.map((row) => {
           const rowId = getRowId(row);
           const expanded = renderExpanded ? expandedId === rowId : false;
 
           return (
             <Fragment key={rowId}>
-              <TableRow>
+              <TableRow
+                onClick={onRowClick ? () => onRowClick(row) : undefined}
+                className={onRowClick ? "cursor-pointer hover:bg-surface" : undefined}
+              >
                 {columns.map((column) => (
                   <TableCell key={column.key} className={column.className}>
                     {cellValue(column, row)}

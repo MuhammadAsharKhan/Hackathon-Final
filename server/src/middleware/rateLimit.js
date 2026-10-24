@@ -5,9 +5,12 @@ const tooManyRequests = {
   message: "Too many requests, try again later",
 };
 
+// A person clicking through the app never reaches this. The demo and role
+// check scripts walk every route in a minute, so the ceiling leaves room for a
+// full pass while still stopping a flood.
 export const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 300,
+  limit: 2000,
   standardHeaders: "draft-7",
   legacyHeaders: false,
   message: tooManyRequests,

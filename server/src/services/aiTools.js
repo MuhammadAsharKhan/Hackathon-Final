@@ -388,6 +388,19 @@ export const toolsForRole = (role) =>
     parameters: TOOL_SPECS[name].parameters,
   }));
 
+// Models fill an optional argument they have nothing for with null or an empty
+// string. Both mean "not provided", and every schema here rejects a blank
+// value, so they are dropped before validation instead of failing the call.
+const withoutBlanks = (value) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+
+  return Object.fromEntries(
+    Object.entries(value).filter(
+      ([, entry]) => entry !== null && entry !== undefined && entry !== ""
+    )
+  );
+};
+
 // The model may name a tool it was not given, or send arguments that break the
 // schema. Both go back as a result the model can recover from. The allowed list
 // is the role scope, so an employee cannot reach an org tool by naming it.
@@ -399,7 +412,7 @@ export const executeTool = async (name, rawArguments, context, allowedNames = nu
   const spec = TOOL_SPECS[name];
   if (!spec) return { error: "unknown_tool", tool: name };
 
-  const parsed = spec.schema.safeParse(rawArguments ?? {});
+  const parsed = spec.schema.safeParse(withoutBlanks(rawArguments ?? {}));
   if (!parsed.success) {
     return {
       error: "invalid_arguments",

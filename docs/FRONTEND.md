@@ -29,13 +29,16 @@ client/src/
 ├── api/                     One module per resource plus http.js
 ├── components/
 │   ├── data/                DataTable, FilterBar, ChartCard
+│   ├── charts/              BarChartBox, LineChartBox, PieChartBox
+│   ├── dashboard/           AdminDashboard, HrDashboard, MyDay, SummaryCard
+│   ├── payroll/             PayslipDrawer and the PDF button
 │   ├── ui/                  Shared controls and states
 │   ├── layout/              AppShell, Sidebar, Topbar, NotificationBell, UserMenu, AuthLayout, Footer, ScrollManager
 │   ├── organization/        Company settings and the four organization panels
 │   ├── users/               Create HR modal and the one time password modal
 │   ├── announcements/       Announcement form modal
 │   ├── audit/               Before and after block for audit rows
-│   ├── ai/                  Admin key table, key modal, key badge, settings form
+│   ├── ai/                  Assistant panel, provider, bubbles and the admin key screens
 │   ├── auth/                Forgot password modal, email code flow
 │   ├── SetupGate.jsx        Setup redirect gate
 │   ├── ProtectedRoute.jsx   Session, role and forced password gate
@@ -56,7 +59,7 @@ Public routes are reachable without a session. Every other route needs one.
 | `/setup` | public | `pages/Setup.jsx` | Only while setup is incomplete. Finishing it signs the admin in and opens `/admin/organization`. |
 | `/login` | public | `pages/Login.jsx` | Redirects to `/setup` while setup is incomplete and to the dashboard when a session exists. |
 | `/change-password` | signed in | `pages/ChangePassword.jsx` | Also the forced target when `mustChangePassword` is true. |
-| `/dashboard` | signed in | `pages/Dashboard.jsx` | Default landing for every role. Metrics arrive with the dashboard step. |
+| `/dashboard` | signed in | `pages/Dashboard.jsx` | Default landing. Renders the admin, HR or employee dashboard for the signed-in role. |
 | `/announcements` | signed in | `pages/Announcements.jsx` | Posting for admin and HR, delete for admin or the author. |
 | `/admin/organization` | admin | `pages/Organization.jsx` | Tabs: Company, Departments, Designations, Leave types, Holidays. |
 | `/admin/users` | admin | `pages/AdminUsers.jsx` | HR logins, one time passwords, activate, deactivate, reset. |
@@ -65,10 +68,11 @@ Public routes are reachable without a session. Every other route needs one.
 | `/employees` | admin, hr | `pages/ComingSoon.jsx` | Placeholder until the people step. |
 | `/attendance` | admin, hr | `pages/ComingSoon.jsx` | Placeholder. |
 | `/leave/requests` | admin, hr | `pages/ComingSoon.jsx` | Placeholder. |
-| `/payroll` | admin, hr | `pages/ComingSoon.jsx` | Placeholder. |
+| `/payroll` | admin, hr | `pages/Payroll.jsx` | Runs table, month picker and the draft button for HR. |
+| `/payroll/:id` | admin, hr | `pages/PayrollRun.jsx` | Totals, payslips, the payslip drawer, recalculate for HR and finalize for the admin. |
 | `/me/attendance` | hr, employee | `pages/ComingSoon.jsx` | Placeholder. |
 | `/me/leave` | hr, employee | `pages/ComingSoon.jsx` | Placeholder. |
-| `/me/payslips` | hr, employee | `pages/ComingSoon.jsx` | Placeholder. |
+| `/me/payslips` | hr, employee | `pages/MyPayslips.jsx` | Finalized payslips with a PDF button per row. |
 | `/me/profile` | hr, employee | `pages/MyProfile.jsx` | Read only record, editable phone and address, link to change the password. |
 | `*` | any | `pages/NotFound.jsx` | Unknown paths. Inside the shell when signed in. |
 
@@ -117,7 +121,10 @@ Every call goes through `api/http.js`. Each module unwraps `{ success, data }` a
 | `notifications.api.js` | `listNotifications`, `getUnreadCount`, `markNotificationRead`, `markAllNotificationsRead` |
 | `audit.api.js` | `listAuditLogs` |
 | `profile.api.js` | `updateMyProfile`, `getEmployeeProfile` |
-| `ai.api.js` | admin AI keys and settings |
+| `payroll.api.js` | `listPayrollRuns`, `getPayrollRun`, `createPayrollRun`, `finalizePayrollRun`, `listMyPayslips`, `getPayslip` |
+| `payslips.api.js` | `downloadPayslipPdf` as a blob with the auth header |
+| `dashboard.api.js` | `getAdminDashboard`, `getHrDashboard`, `getMyDashboard` |
+| `ai.api.js` | `chatWithAssistant`, `dashboardSummary`, `smartLeave`, plus the admin key calls |
 
 `GET /employees/:id` feeds the contact details on My profile. It belongs to the people module; when it is missing the page says the details did not load and still saves phone and address through `PATCH /me/profile`.
 
@@ -146,8 +153,12 @@ Lists use `DataTable` with a column config of `{ key, header, render, className 
 
 Every data view has a loading, empty and error state, forms disable while submitting, and nothing shows a raw error object. Pages work from 375 px; tables scroll inside their card instead of the page.
 
-## Not built yet
+## Later steps
 
-- Dashboards: `/dashboard` shows the account summary and a note until the dashboard endpoints exist.
-- Employees, attendance, leave requests, payroll and the three personal module screens are placeholders with the route, menu entry and page header in place.
-- The assistant panel and its floating button are not mounted; only the admin AI keys screen is part of this step.
+- People, attendance and leave screens: `docs/FRONTEND_PEOPLE.md`.
+- Payroll, dashboards and the assistant: `docs/FRONTEND_PAYROLL_AI.md`.
+
+## Known issues
+
+- The payroll runs table shows the finalized date but not the finalizer name, because the server stores the user id without populating it.
+- Chart data is repeated as a visually hidden text summary for screen readers rather than as a data table.

@@ -10,6 +10,14 @@ export const AI_DEFAULTS = {
     "You are a helpful assistant. Keep answers short and direct. Use markdown for code blocks and lists.",
 };
 
+// A grok-type key carries its vendor in the prefix: gsk_ is Groq, xai- is xAI.
+// Unknown prefixes fall back to AI_PROVIDER.
+export const detectGrokVendor = (key) => {
+  if (key.startsWith("gsk_")) return "groq";
+  if (key.startsWith("xai-")) return "xai";
+  return null;
+};
+
 // AI_PROVIDER names the vendor. Gemini has its own adapter; Groq and xAI both
 // speak the OpenAI-compatible shape, which the pool stores as "grok".
 export const AI_PROVIDER_PRESETS = {
@@ -44,6 +52,16 @@ const isPrivateHost = (hostname) => {
 
 // Production only reaches the public internet over https. Development may use
 // a local mock server, and credentials are never part of a base URL.
+// The grok pair in settings is one base URL for every grok key, so a set of
+// keys from one vendor decides it. A mixed set keeps the configured preset.
+export const grokVendorPreset = (vendors) => {
+  const unique = [...new Set(vendors.filter(Boolean))];
+  if (unique.length !== 1) return null;
+
+  const preset = AI_PROVIDER_PRESETS[unique[0]];
+  return preset?.provider === "grok" ? preset : null;
+};
+
 export const isAllowedAiBaseUrl = (value) => {
   if (!value) return false;
 

@@ -2,6 +2,18 @@ import http from "./http";
 
 const unwrap = (response) => response.data.data;
 
+export const smartLeave = (message) =>
+  http.post("/ai/smart-leave", { message }).then(unwrap);
+
+export const chatWithAssistant = (message, conversationId) =>
+  http.post("/ai/chat", { message, conversationId }).then(unwrap);
+
+export const getConversation = (id) =>
+  http.get(`/ai/conversations/${id}`).then(unwrap);
+
+export const dashboardSummary = (filters) =>
+  http.post("/ai/dashboard-summary", filters).then(unwrap);
+
 export const listAiKeys = () => http.get("/admin/ai/keys").then(unwrap);
 
 export const createAiKey = (keyInput) =>
