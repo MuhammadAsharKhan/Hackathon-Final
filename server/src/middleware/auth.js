@@ -4,6 +4,20 @@ import User from "../models/User.js";
 import ApiError from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 
+// A forced password change locks every route except the four that let the user
+// finish it or leave.
+const PASSWORD_CHANGE_ROUTES = new Set([
+  "POST /auth/change-password",
+  "GET /auth/me",
+  "POST /auth/logout",
+  "POST /auth/refresh",
+]);
+
+const routeKey = (req) => {
+  const path = req.originalUrl.split("?")[0].replace(/^\/api/, "");
+  return `${req.method} ${path}`;
+};
+
 export const protect = asyncHandler(async (req, res, next) => {
   const header = req.headers.authorization || "";
 
@@ -23,21 +37,25 @@ export const protect = asyncHandler(async (req, res, next) => {
 
   const user = await User.findById(tokenPayload.sub);
   if (!user) throw new ApiError(401, "Not authenticated");
-  if (!user.emailVerified) {
-    throw new ApiError(401, "Verify your email to continue");
-  }
+  if (!user.isActive) throw new ApiError(401, "This account is inactive");
 
   req.user = {
     id: user.id,
-    uid: user.uid,
     name: user.name,
     email: user.email,
-    age: user.age ?? null,
-    gender: user.gender ?? null,
-    avatarUrl: user.avatarUrl ?? "",
-    hasPassword: user.hasPassword,
     role: user.role,
+    employeeId: user.employeeId ? String(user.employeeId) : null,
+    mustChangePassword: user.mustChangePassword,
   };
+
+  if (user.mustChangePassword && !PASSWORD_CHANGE_ROUTES.has(routeKey(req))) {
+    throw new ApiError(
+      403,
+      "Change your password to continue",
+      undefined,
+      "PASSWORD_CHANGE_REQUIRED"
+    );
+  }
 
   next();
 });

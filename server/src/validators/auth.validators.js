@@ -25,25 +25,6 @@ export const passwordSchema = z
   .regex(/[A-Za-z]/, "Password must contain a letter")
   .regex(/[0-9]/, "Password must contain a number");
 
-export const ageSchema = z.coerce
-  .number()
-  .int("Age must be a whole number")
-  .min(1, "Age must be at least 1")
-  .max(150, "Age must be at most 150");
-
-export const genderSchema = z.enum(
-  ["male", "female", "other", "prefer_not_to_say"],
-  "Gender must be male, female, other or prefer_not_to_say"
-);
-
-export const registerSchema = z.object({
-  name: nameSchema,
-  email: emailSchema,
-  password: passwordSchema,
-  age: ageSchema,
-  gender: genderSchema.optional(),
-});
-
 export const loginSchema = z.object({
   email: emailSchema,
   password: z
@@ -55,12 +36,9 @@ export const loginSchema = z.object({
     }),
 });
 
-export const googleSignInSchema = z.object({
-  credential: z.string().min(20, "Google credential is required"),
-});
-
-export const facebookSignInSchema = z.object({
-  accessToken: z.string().min(20, "Facebook access token is required"),
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, "Current password is required"),
+  newPassword: passwordSchema,
 });
 
 export const forgotPasswordSchema = z.object({
@@ -70,15 +48,6 @@ export const forgotPasswordSchema = z.object({
 export const verifyOtpSchema = z.object({
   email: emailSchema,
   otp: z.string().min(1, "Code is required").max(10, "Invalid code"),
-});
-
-export const verifyEmailSchema = z.object({
-  email: emailSchema,
-  otp: z.string().min(1, "Code is required").max(10, "Invalid code"),
-});
-
-export const resendVerificationSchema = z.object({
-  email: emailSchema,
 });
 
 export const resetPasswordSchema = z.object({

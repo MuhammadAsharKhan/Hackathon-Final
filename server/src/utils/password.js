@@ -16,7 +16,6 @@ export const ensurePasswordDiffers = async (user, newPassword) => {
 
 export const saveNewPassword = async (user, newPassword) => {
   user.password = newPassword;
-  user.hasPassword = true;
   user.refreshTokens = [];
   user.previousRefreshToken = null;
   await user.save();

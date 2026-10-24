@@ -1,6 +1,5 @@
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
-import { createUid } from "../utils/uid.js";
 
 const refreshTokenSchema = new mongoose.Schema(
   {
@@ -21,11 +20,6 @@ const previousTokenSchema = new mongoose.Schema(
 
 const userSchema = new mongoose.Schema(
   {
-    uid: {
-      type: String,
-      unique: true,
-      immutable: true,
-    },
     name: {
       type: String,
       required: [true, "Name is required"],
@@ -44,51 +38,27 @@ const userSchema = new mongoose.Schema(
       type: String,
       select: false,
     },
-    hasPassword: {
-      type: Boolean,
-      default: false,
-    },
-    emailVerified: {
-      type: Boolean,
-      default: false,
-    },
-    age: {
-      type: Number,
-      default: null,
-      min: [1, "Age must be at least 1"],
-      max: [150, "Age must be at most 150"],
-      validate: {
-        validator: (value) => value === null || Number.isInteger(value),
-        message: "Age must be a whole number",
-      },
-    },
-    gender: {
-      type: String,
-      enum: ["male", "female", "other", "prefer_not_to_say"],
-      default: null,
-    },
-    avatarUrl: {
-      type: String,
-      default: "",
-    },
-    avatarPublicId: {
-      type: String,
-      default: "",
-    },
-    googleId: {
-      type: String,
-      unique: true,
-      sparse: true,
-    },
-    facebookId: {
-      type: String,
-      unique: true,
-      sparse: true,
-    },
     role: {
       type: String,
-      enum: ["user", "admin"],
-      default: "user",
+      enum: ["admin", "hr", "employee"],
+      default: "employee",
+    },
+    employeeId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Employee",
+      default: null,
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
+    mustChangePassword: {
+      type: Boolean,
+      default: false,
+    },
+    lastLoginAt: {
+      type: Date,
+      default: null,
     },
     refreshTokens: {
       type: [refreshTokenSchema],
@@ -103,21 +73,11 @@ const userSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-userSchema.pre("validate", async function assignUid() {
-  if (!this.isNew || this.uid) return;
-  this.uid = await createUid(this.constructor);
-});
-
 userSchema.pre("save", async function hashPassword() {
   if (!this.isModified("password")) return;
-
-  if (!this.password) {
-    this.hasPassword = false;
-    return;
-  }
+  if (!this.password) return;
 
   this.password = await bcrypt.hash(this.password, 12);
-  this.hasPassword = true;
 });
 
 userSchema.methods.comparePassword = function comparePassword(plain) {
@@ -128,15 +88,10 @@ userSchema.methods.comparePassword = function comparePassword(plain) {
 userSchema.set("toJSON", {
   transform: (document, json) => {
     json.id = json._id.toString();
-    if (json.age === undefined) json.age = null;
-    if (json.gender === undefined) json.gender = null;
     delete json._id;
     delete json.password;
     delete json.refreshTokens;
     delete json.previousRefreshToken;
-    delete json.googleId;
-    delete json.facebookId;
-    delete json.avatarPublicId;
     delete json.__v;
     return json;
   },

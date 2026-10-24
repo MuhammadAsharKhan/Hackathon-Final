@@ -3,7 +3,6 @@ import jwt from "jsonwebtoken";
 import { config } from "../config/env.js";
 
 export const PASSWORD_RESET = "password-reset";
-export const EMAIL_VERIFICATION = "email-verification";
 
 const RESET_TTL = "10m";
 

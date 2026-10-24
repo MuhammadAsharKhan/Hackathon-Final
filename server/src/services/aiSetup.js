@@ -1,8 +1,8 @@
 import AiKey from "../models/AiKey.js";
 import AiSettings from "../models/AiSettings.js";
 import { config } from "../config/env.js";
-import { AI_DEFAULTS, detectGrokVendor } from "../config/aiDefaults.js";
-import { decryptSecret, encryptSecret } from "../utils/crypto.js";
+import { AI_DEFAULTS, AI_PROVIDER_PRESETS } from "../config/aiDefaults.js";
+import { encryptSecret } from "../utils/crypto.js";
 
 export const loadAiSettings = async () => {
   const existingSettings = await AiSettings.findOne();
@@ -11,74 +11,45 @@ export const loadAiSettings = async () => {
   return AiSettings.create({ ...AI_DEFAULTS });
 };
 
-const envProviderKeys = () => [
-  ...config.geminiApiKeys.map((apiKey, index) => ({
-    provider: "gemini",
-    label: `Gemini ${index + 1}`,
-    apiKey,
-  })),
-  ...config.grokApiKeys.map((apiKey, index) => ({
-    provider: "grok",
-    label: `Grok ${index + 1}`,
-    apiKey,
-  })),
-];
+const envPreset = () =>
+  AI_PROVIDER_PRESETS[config.aiProvider] ?? AI_PROVIDER_PRESETS.gemini;
 
-// Environment keys are the defaults, so every boot adds the ones the database
-// does not hold yet. A key added to the deployment after the first boot still
-// reaches the pool, and a stored key that the current AI_KEY_SECRET cannot
-// decrypt does not count as present, so it is replaced instead of lived with.
-const seedAiKeys = async () => {
-  const wantedKeys = envProviderKeys();
-  if (wantedKeys.length === 0) return;
+// AI_API_KEY is the first key. It is imported only while the database holds no
+// key at all, so a key removed from /admin/ai is never brought back.
+const seedAiKey = async () => {
+  if (!config.aiApiKey) return false;
+  const storedKey = await AiKey.exists({});
+  if (storedKey) return false;
 
-  const storedKeys = await AiKey.find().select("+encryptedKey");
-  const storedSecrets = new Set(
-    storedKeys.map((keyRecord) => decryptSecret(keyRecord.encryptedKey))
-  );
-
-  const seen = new Set();
-  const additions = wantedKeys.filter(({ apiKey }) => {
-    if (storedSecrets.has(apiKey) || seen.has(apiKey)) return false;
-    seen.add(apiKey);
-    return true;
+  const preset = envPreset();
+  await AiKey.create({
+    provider: preset.provider,
+    label: `${config.aiProvider} environment key`,
+    encryptedKey: encryptSecret(config.aiApiKey),
   });
 
-  if (additions.length === 0) {
-    console.log(`AI keys: ${storedKeys.length} stored, none imported`);
-    return;
-  }
-
-  await AiKey.insertMany(
-    additions.map(({ provider, label, apiKey }) => ({
-      provider,
-      label,
-      encryptedKey: encryptSecret(apiKey),
-    }))
-  );
-
-  console.log(`AI keys: imported ${additions.length} from environment`);
+  console.log("AI keys: imported the environment key");
+  return true;
 };
 
 const seedAiSettings = async () => {
-  const existingSettings = await AiSettings.findOne();
+  const existingSettings = await AiSettings.exists({});
   if (existingSettings) return;
 
-  const grokVendor = detectGrokVendor(config.grokApiKeys[0]);
-  const grokIsOnlyProvider =
-    config.geminiApiKeys.length === 0 && config.grokApiKeys.length > 0;
+  const preset = envPreset();
+  const providerDefaults =
+    preset.provider === "gemini"
+      ? { geminiModel: preset.model, geminiBaseUrl: preset.baseUrl }
+      : { grokModel: preset.model, grokBaseUrl: preset.baseUrl };
 
   await AiSettings.create({
     ...AI_DEFAULTS,
-    defaultProvider: grokIsOnlyProvider
-      ? "grok"
-      : AI_DEFAULTS.defaultProvider,
-    grokBaseUrl: grokVendor?.baseUrl ?? AI_DEFAULTS.grokBaseUrl,
-    grokModel: grokVendor?.model ?? AI_DEFAULTS.grokModel,
+    defaultProvider: preset.provider,
+    ...providerDefaults,
   });
 };
 
 export const setupAi = async () => {
-  await seedAiKeys();
+  await seedAiKey();
   await seedAiSettings();
 };

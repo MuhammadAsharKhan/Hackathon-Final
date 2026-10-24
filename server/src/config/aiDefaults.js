@@ -1,5 +1,3 @@
-import { config } from "./env.js";
-
 export const AI_DEFAULTS = {
   defaultProvider: "gemini",
   geminiModel: "gemini-3.5-flash-lite",
@@ -10,27 +8,24 @@ export const AI_DEFAULTS = {
     "You are a helpful assistant. Keep answers short and direct. Use markdown for code blocks and lists.",
 };
 
-const GROK_VENDORS = {
-  "gsk_": {
-    name: "groq",
+// AI_PROVIDER names the vendor. Gemini has its own adapter; Groq and xAI both
+// speak the OpenAI-compatible shape, which the pool stores as "grok".
+export const AI_PROVIDER_PRESETS = {
+  gemini: {
+    provider: "gemini",
+    baseUrl: AI_DEFAULTS.geminiBaseUrl,
+    model: AI_DEFAULTS.geminiModel,
+  },
+  groq: {
+    provider: "grok",
     baseUrl: "https://api.groq.com/openai/v1",
     model: "openai/gpt-oss-20b",
   },
-  "xai-": {
-    name: "xai",
+  xai: {
+    provider: "grok",
     baseUrl: "https://api.x.ai/v1",
     model: "grok-4.7",
   },
-};
-
-export const detectGrokVendor = (apiKey) => {
-  if (!apiKey) return null;
-
-  const prefix = Object.keys(GROK_VENDORS).find((candidate) =>
-    apiKey.startsWith(candidate)
-  );
-
-  return prefix ? GROK_VENDORS[prefix] : null;
 };
 
 const isLoopbackHost = (hostname) =>

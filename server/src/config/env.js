@@ -36,6 +36,10 @@ const envSchema = z.object({
   TRUST_PROXY_HOPS: numberField(z.coerce.number().int().min(0), 1),
   SELF_URL: z.preprocess(emptyToUndefined, z.string().url().optional()),
   KEEP_ALIVE_MINUTES: numberField(z.coerce.number().int().positive(), 4),
+  COMPANY_NAME: z.preprocess(
+    emptyToUndefined,
+    z.string().trim().max(120).default("My Company")
+  ),
   ADMIN_EMAIL: emailField,
   ADMIN_PASSWORD: z.preprocess(
     emptyToUndefined,
@@ -51,23 +55,14 @@ const envSchema = z.object({
   JWT_RESET_SECRET: z
     .string()
     .min(32, "JWT_RESET_SECRET must be at least 32 characters"),
-  EMAIL_VERIFICATION_REQUIRED: z.enum(["true", "false"]).default("true"),
-  GOOGLE_CLIENT_ID: z.preprocess(emptyToUndefined, z.string().optional()),
-  FACEBOOK_APP_ID: z.preprocess(emptyToUndefined, z.string().optional()),
-  FACEBOOK_APP_SECRET: z.preprocess(emptyToUndefined, z.string().optional()),
-  CLOUDINARY_CLOUD_NAME: z.preprocess(emptyToUndefined, z.string().optional()),
-  CLOUDINARY_API_KEY: z.preprocess(emptyToUndefined, z.string().optional()),
-  CLOUDINARY_API_SECRET: z.preprocess(emptyToUndefined, z.string().optional()),
   RESEND_API_KEY: z.preprocess(emptyToUndefined, z.string().optional()),
   MAIL_FROM: z.string().default("onboarding@resend.dev"),
   AI_KEY_SECRET: z
     .string()
     .regex(/^[0-9a-fA-F]{64}$/, "AI_KEY_SECRET must be 64 hex characters"),
   AI_COOLDOWN_SECONDS: numberField(z.coerce.number().int().positive(), 60),
-  GEMINI_API_KEY_1: z.preprocess(emptyToUndefined, z.string().optional()),
-  GEMINI_API_KEY_2: z.preprocess(emptyToUndefined, z.string().optional()),
-  GROK_API_KEY_1: z.preprocess(emptyToUndefined, z.string().optional()),
-  GROK_API_KEY_2: z.preprocess(emptyToUndefined, z.string().optional()),
+  AI_API_KEY: z.preprocess(emptyToUndefined, z.string().optional()),
+  AI_PROVIDER: z.enum(["gemini", "groq", "xai"]).default("gemini"),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -99,20 +94,14 @@ export const config = Object.freeze({
   trustProxyHops: env.TRUST_PROXY_HOPS,
   selfUrl: env.SELF_URL ?? "",
   keepAliveMinutes: env.KEEP_ALIVE_MINUTES,
+  companyName: env.COMPANY_NAME,
   adminEmail: env.ADMIN_EMAIL ?? "",
   adminPassword: env.ADMIN_PASSWORD ?? "",
   jwtResetSecret: env.JWT_RESET_SECRET,
-  emailVerificationRequired: env.EMAIL_VERIFICATION_REQUIRED !== "false",
-  googleClientId: env.GOOGLE_CLIENT_ID ?? "",
-  facebookAppId: env.FACEBOOK_APP_ID ?? "",
-  facebookAppSecret: env.FACEBOOK_APP_SECRET ?? "",
-  cloudinaryCloudName: env.CLOUDINARY_CLOUD_NAME ?? "",
-  cloudinaryApiKey: env.CLOUDINARY_API_KEY ?? "",
-  cloudinaryApiSecret: env.CLOUDINARY_API_SECRET ?? "",
   resendApiKey: env.RESEND_API_KEY ?? "",
   mailFrom: env.MAIL_FROM,
   aiKeySecret: env.AI_KEY_SECRET,
   aiCooldownSeconds: env.AI_COOLDOWN_SECONDS,
-  geminiApiKeys: [env.GEMINI_API_KEY_1, env.GEMINI_API_KEY_2].filter(Boolean),
-  grokApiKeys: [env.GROK_API_KEY_1, env.GROK_API_KEY_2].filter(Boolean),
+  aiApiKey: env.AI_API_KEY ?? "",
+  aiProvider: env.AI_PROVIDER,
 });

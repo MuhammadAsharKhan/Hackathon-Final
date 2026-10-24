@@ -1,46 +1,33 @@
 import { Router } from "express";
 import {
-  changePassword,
-  deleteAvatar,
-  findUserByUid,
+  createHrUser,
   listUsers,
-  updateAvatar,
-  updateProfile,
+  resetUserPassword,
+  setUserActive,
 } from "../controllers/user.controller.js";
 import { protect, restrictTo } from "../middleware/auth.js";
-import { avatarUpload } from "../middleware/upload.js";
-import { uidLimiter } from "../middleware/rateLimit.js";
 import { validate } from "../middleware/validate.js";
+import { objectIdSchema } from "../validators/common.validators.js";
 import {
-  changePasswordSchema,
+  createHrUserSchema,
   listUsersQuerySchema,
-  uidParamSchema,
-  updateProfileSchema,
+  setUserActiveSchema,
 } from "../validators/user.validators.js";
+import { z } from "zod";
 
 const router = Router();
+const idSchema = z.object({ id: objectIdSchema });
 
-router.use(protect);
+router.use(protect, restrictTo("admin"));
 
-router.patch("/me", validate(updateProfileSchema), updateProfile);
+router.get("/", validate(listUsersQuerySchema, "query"), listUsers);
+router.post("/hr", validate(createHrUserSchema), createHrUser);
 router.patch(
-  "/me/password",
-  validate(changePasswordSchema),
-  changePassword
+  "/:id/active",
+  validate(idSchema, "params"),
+  validate(setUserActiveSchema),
+  setUserActive
 );
-router.put("/me/avatar", avatarUpload, updateAvatar);
-router.delete("/me/avatar", deleteAvatar);
-router.get(
-  "/uid/:uid",
-  uidLimiter,
-  validate(uidParamSchema, "params"),
-  findUserByUid
-);
-router.get(
-  "/",
-  restrictTo("admin"),
-  validate(listUsersQuerySchema, "query"),
-  listUsers
-);
+router.post("/:id/reset-password", validate(idSchema, "params"), resetUserPassword);
 
 export default router;

@@ -1,11 +1,11 @@
 import mongoose from "mongoose";
-import { EMAIL_VERIFICATION, PASSWORD_RESET } from "../utils/otp.js";
+import { PASSWORD_RESET } from "../utils/otp.js";
 
 const passwordOtpSchema = new mongoose.Schema(
   {
     purpose: {
       type: String,
-      enum: [PASSWORD_RESET, EMAIL_VERIFICATION],
+      enum: [PASSWORD_RESET],
       default: PASSWORD_RESET,
       required: true,
     },

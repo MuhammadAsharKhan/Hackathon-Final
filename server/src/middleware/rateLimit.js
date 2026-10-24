@@ -30,14 +30,6 @@ export const otpLimiter = rateLimit({
   message: tooManyRequests,
 });
 
-export const uidLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  limit: 30,
-  standardHeaders: "draft-7",
-  legacyHeaders: false,
-  message: tooManyRequests,
-});
-
 export const aiChatLimiter = rateLimit({
   windowMs: 60 * 1000,
   limit: 20,
