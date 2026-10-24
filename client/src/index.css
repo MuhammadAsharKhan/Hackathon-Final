@@ -6,10 +6,12 @@
   --background: #ffffff;
   --foreground: #0a0a0a;
   --surface: #fafafa;
+  --surface-tint: #f0fdfa;
   --muted: #f4f4f5;
   --muted-foreground: #71717a;
   --border: #e4e4e7;
-  --primary: #0a0a0a;
+  --primary: #0f766e;
+  --primary-hover: #115e59;
   --primary-foreground: #ffffff;
   --danger: #dc2626;
   --success: #16a34a;
@@ -64,6 +66,18 @@
     color: var(--success);
     background-color: color-mix(in srgb, var(--success) 8%, var(--background));
     border-color: color-mix(in srgb, var(--success) 28%, var(--border));
+  }
+
+  .badge-accent {
+    color: var(--primary);
+    background-color: var(--surface-tint);
+    border-color: color-mix(in srgb, var(--primary) 24%, var(--border));
+  }
+
+  .badge-danger {
+    color: var(--danger);
+    background-color: color-mix(in srgb, var(--danger) 8%, var(--background));
+    border-color: color-mix(in srgb, var(--danger) 28%, var(--border));
   }
 
   .overlay-backdrop {

@@ -1,33 +1,32 @@
 import { useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
+import ForgotPasswordModal from "@/components/auth/ForgotPasswordModal";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import FormError from "@/components/ui/FormError";
 import Input from "@/components/ui/Input";
-import FacebookSection from "@/components/auth/FacebookSection";
-import ForgotPasswordModal from "@/components/auth/ForgotPasswordModal";
-import GoogleSection from "@/components/auth/GoogleSection";
+import { useSetup } from "@/context/SetupContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useMountedRef } from "@/hooks/useMountedRef";
 import { getErrorMessage, getFieldErrors } from "@/lib/errors";
-import { redirectPath } from "@/lib/navigation";
-import { savePendingEmail } from "@/lib/pendingVerification";
+import { CHANGE_PASSWORD_PATH, redirectPath } from "@/lib/navigation";
 
 export default function Login() {
-  const { login } = useAuth();
   useDocumentTitle("Sign in");
+
+  const { login } = useAuth();
+  const { setupComplete } = useSetup();
   const navigate = useNavigate();
   const location = useLocation();
+  const mountedRef = useMountedRef();
+
   const [values, setValues] = useState({ email: "", password: "" });
   const [fieldErrors, setFieldErrors] = useState({});
   const [formError, setFormError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [forgotOpen, setForgotOpen] = useState(false);
-  const mountedRef = useMountedRef();
-
-  const from = redirectPath(location);
 
   const update = (field) => (event) => {
     const { value } = event.target;
@@ -49,22 +48,19 @@ export default function Login() {
     setSubmitting(true);
 
     try {
-      await login({ email: values.email.trim(), password: values.password });
+      const session = await login({
+        email: values.email.trim(),
+        password: values.password,
+      });
       if (!mountedRef.current) return;
+
+      const target = session.mustChangePassword
+        ? CHANGE_PASSWORD_PATH
+        : redirectPath(location);
+      navigate(target, { replace: true });
       toast.success("Signed in");
-      navigate(from, { replace: true });
     } catch (error) {
       if (!mountedRef.current) return;
-
-      if (error.response?.data?.code === "EMAIL_NOT_VERIFIED") {
-        savePendingEmail(values.email.trim().toLowerCase());
-        navigate("/verify-email", {
-          state: { ...location.state, notice: "A new code was sent." },
-          replace: true,
-        });
-        return;
-      }
-
       setFieldErrors(getFieldErrors(error));
       setFormError(getErrorMessage(error));
     } finally {
@@ -76,8 +72,14 @@ export default function Login() {
     <Card className="p-6 sm:p-8">
       <h1 className="text-xl font-semibold tracking-tight">Sign in</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        Use the account you registered with.
+        Use the account your admin created for you.
       </p>
+
+      {!setupComplete ? (
+        <p className="mt-4 rounded-lg border border-border bg-surface px-3 py-2 text-xs text-muted-foreground">
+          Company setup is not finished yet. Complete the setup screen first.
+        </p>
+      ) : null}
 
       <form className="mt-6 space-y-4" onSubmit={handleSubmit} noValidate>
         <Input
@@ -104,7 +106,7 @@ export default function Login() {
             className="min-h-10 px-0 text-xs text-muted-foreground hover:bg-transparent hover:text-foreground"
             onClick={() => setForgotOpen(true)}
           >
-            Reset password
+            Forgot password
           </Button>
         </div>
 
@@ -114,19 +116,6 @@ export default function Login() {
           Sign in
         </Button>
       </form>
-
-      <GoogleSection />
-      <FacebookSection />
-
-      <p className="mt-5 text-sm text-muted-foreground">
-        <Link
-          to="/register"
-          state={location.state}
-          className="font-medium text-foreground underline-offset-4 hover:underline"
-        >
-          Create an account
-        </Link>
-      </p>
 
       <ForgotPasswordModal
         open={forgotOpen}

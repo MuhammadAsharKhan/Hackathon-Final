@@ -3,7 +3,8 @@ import { cn } from "@/lib/cn";
 import Spinner from "./Spinner";
 
 const variants = {
-  primary: "border border-primary bg-primary text-primary-foreground hover:opacity-90",
+  primary:
+    "border border-primary bg-primary text-primary-foreground hover:border-primary-hover hover:bg-primary-hover",
   secondary:
     "border border-border bg-background text-foreground hover:bg-surface",
   ghost: "border border-transparent bg-transparent text-foreground hover:bg-muted",

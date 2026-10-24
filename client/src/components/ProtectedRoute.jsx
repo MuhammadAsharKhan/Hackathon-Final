@@ -1,32 +1,32 @@
-import { Navigate, useLocation } from "react-router-dom";
-import Spinner from "@/components/ui/Spinner";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
+import PageLoading from "@/components/ui/PageLoading";
 import { useAuth } from "@/hooks/useAuth";
+import { CHANGE_PASSWORD_PATH } from "@/lib/navigation";
 
 export default function ProtectedRoute({ roles, children }) {
-  const { user, loading } = useAuth();
+  const { user, mustChangePassword, loading } = useAuth();
   const location = useLocation();
 
   if (loading) {
     return (
-      <div
-        role="status"
-        className="flex min-h-[40vh] items-center justify-center"
-      >
-        <Spinner className="h-5 w-5 text-muted-foreground" />
-        <span className="sr-only">Loading</span>
+      <div className="flex min-h-screen items-center justify-center">
+        <PageLoading label="Loading your session" />
       </div>
     );
   }
 
   if (!user) {
-    return (
-      <Navigate to="/login" state={{ from: location }} replace />
-    );
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  // A temporary password blocks every screen except the change form.
+  if (mustChangePassword && location.pathname !== CHANGE_PASSWORD_PATH) {
+    return <Navigate to={CHANGE_PASSWORD_PATH} replace />;
   }
 
   if (roles && !roles.includes(user.role)) {
     return <Navigate to="/dashboard" replace />;
   }
 
-  return children;
+  return children || <Outlet />;
 }

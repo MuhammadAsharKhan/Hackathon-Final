@@ -5,7 +5,10 @@ export default {
       colors: {
         background: "var(--background)",
         foreground: "var(--foreground)",
-        surface: "var(--surface)",
+        surface: {
+          DEFAULT: "var(--surface)",
+          tint: "var(--surface-tint)",
+        },
         muted: {
           DEFAULT: "var(--muted)",
           foreground: "var(--muted-foreground)",
@@ -13,6 +16,7 @@ export default {
         border: "var(--border)",
         primary: {
           DEFAULT: "var(--primary)",
+          hover: "var(--primary-hover)",
           foreground: "var(--primary-foreground)",
         },
         danger: "var(--danger)",

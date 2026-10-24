@@ -25,14 +25,12 @@ http.interceptors.request.use((requestConfig) => {
 });
 
 // A 401 from these paths is an answer, not an expired session. Refreshing and
-// retrying a failed social sign-in would sign the user out over a stale Google
-// credential they just clicked.
+// retrying a failed sign-in would sign the user out over a wrong password.
 const NO_REFRESH_PATHS = [
   "/auth/login",
-  "/auth/register",
   "/auth/refresh",
-  "/auth/google",
-  "/auth/facebook",
+  "/auth/logout",
+  "/auth/change-password",
 ];
 
 const shouldSkipRefresh = (url = "") =>
@@ -66,11 +64,21 @@ const retryWithFreshToken = async (config) => {
   return http(config);
 };
 
+// The server locks every route except the password change when a temporary
+// password is still in use. The shell listens for this and sends the user to
+// the change-password screen instead of showing a dead page.
+const announcePasswordChange = (data) => {
+  if (data?.code !== "PASSWORD_CHANGE_REQUIRED") return;
+  window.dispatchEvent(new Event("auth:passwordChangeRequired"));
+};
+
 http.interceptors.response.use(
   (response) => response,
   async (error) => {
     const config = error.config;
     const status = error.response?.status;
+
+    announcePasswordChange(error.response?.data);
 
     if (
       status !== 401 ||

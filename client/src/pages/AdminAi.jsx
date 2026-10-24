@@ -29,7 +29,7 @@ const toSettingsForm = (settings) => ({
 });
 
 export default function AdminAi() {
-  useDocumentTitle("AI settings");
+  useDocumentTitle("AI keys");
 
   const [keyRecords, setKeyRecords] = useState([]);
   const [settingsForm, setSettingsForm] = useState(null);
@@ -248,11 +248,11 @@ export default function AdminAi() {
     return (
       <div className="space-y-6">
         <PageHeader
-          title="AI settings"
-          description="Provider keys, models and the system prompt used by AI Buddy."
+          title="AI keys"
+          description="Provider keys, models and the system prompt used by the assistant."
         />
         <ErrorState
-          title="AI settings did not load"
+          title="AI keys did not load"
           message={loadError}
           onRetry={loadAdminData}
         />
@@ -264,8 +264,8 @@ export default function AdminAi() {
     return (
       <div className="space-y-6">
         <PageHeader
-          title="AI settings"
-          description="Provider keys, models and the system prompt used by AI Buddy."
+          title="AI keys"
+          description="Provider keys, models and the system prompt used by the assistant."
         />
         <div className="space-y-3" aria-hidden="true">
           <div className="skeleton h-14 w-full" />
@@ -279,8 +279,8 @@ export default function AdminAi() {
   return (
     <div className="space-y-10">
       <PageHeader
-        title="AI settings"
-        description="Provider keys, models and the system prompt used by AI Buddy."
+        title="AI keys"
+        description="Provider keys, models and the system prompt used by the assistant."
       />
 
       <AdminKeysTable

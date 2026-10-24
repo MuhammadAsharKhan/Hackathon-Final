@@ -44,7 +44,7 @@ export default function AdminKeysTable({
         <EmptyState
           icon={KeyRound}
           title="No keys yet"
-          description="Add a provider key so AI Buddy can answer."
+          description="Add a provider key so the assistant can answer."
         />
       ) : (
         <Table columns={COLUMNS}>

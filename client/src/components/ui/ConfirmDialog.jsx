@@ -9,6 +9,7 @@ export default function ConfirmDialog({
   description,
   confirmLabel = "Delete",
   loading = false,
+  error,
   className,
   ...props
 }) {
@@ -31,9 +32,16 @@ export default function ConfirmDialog({
         </>
       }
     >
-      <p className="text-sm text-muted-foreground">
-        This action cannot be undone.
-      </p>
+      <div className="space-y-2">
+        <p className="text-sm text-muted-foreground">
+          This action cannot be undone.
+        </p>
+        {error ? (
+          <p role="alert" className="text-sm text-danger">
+            {error}
+          </p>
+        ) : null}
+      </div>
     </Modal>
   );
 }

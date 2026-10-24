@@ -12,13 +12,25 @@ export const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
+  const [employee, setEmployee] = useState(null);
+  const [mustChangePassword, setMustChangePassword] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const startSession = useCallback((session) => {
+  const applySession = useCallback((session) => {
     setToken(session.accessToken);
     rememberSession();
     setUser(session.user);
-    return session.user;
+    setEmployee(session.employee ?? null);
+    setMustChangePassword(Boolean(session.mustChangePassword));
+    return session;
+  }, []);
+
+  const dropSession = useCallback(() => {
+    clearToken();
+    forgetSession();
+    setUser(null);
+    setEmployee(null);
+    setMustChangePassword(false);
   }, []);
 
   useEffect(() => {
@@ -35,13 +47,9 @@ export function AuthProvider({ children }) {
 
       try {
         const session = await authApi.refresh();
-        if (!active) return;
-        startSession(session);
+        if (active) applySession(session);
       } catch {
-        if (!active) return;
-        clearToken();
-        forgetSession();
-        setUser(null);
+        if (active) dropSession();
       } finally {
         if (active) setLoading(false);
       }
@@ -49,95 +57,75 @@ export function AuthProvider({ children }) {
 
     bootstrap();
 
-    const handleLogout = () => {
-      clearToken();
-      forgetSession();
-      setUser(null);
-    };
+    const handleLogout = () => dropSession();
+    const handlePasswordRequired = () => setMustChangePassword(true);
 
     window.addEventListener("auth:logout", handleLogout);
+    window.addEventListener("auth:passwordChangeRequired", handlePasswordRequired);
 
     return () => {
       active = false;
       window.removeEventListener("auth:logout", handleLogout);
+      window.removeEventListener(
+        "auth:passwordChangeRequired",
+        handlePasswordRequired
+      );
     };
-  }, [startSession]);
+  }, [applySession, dropSession]);
 
   const login = useCallback(
-    async (credentials) => {
-      const session = await authApi.login(credentials);
-      return startSession(session);
-    },
-    [startSession]
+    async (credentials) => applySession(await authApi.login(credentials)),
+    [applySession]
   );
 
-  // Registration may answer with a session or ask for an emailed code.
-  const register = useCallback(
-    async (account) => {
-      const result = await authApi.register(account);
-      if (result.accessToken) startSession(result);
-      return result;
-    },
-    [startSession]
-  );
-
-  const verifyEmail = useCallback(
-    async (verification) => {
-      const session = await authApi.verifyEmail(verification);
-      return startSession(session);
-    },
-    [startSession]
-  );
-
-  const loginWithGoogle = useCallback(
-    async (credential) => {
-      const session = await authApi.signInWithGoogle(credential);
-      return startSession(session);
-    },
-    [startSession]
-  );
-
-  const loginWithFacebook = useCallback(
-    async (accessToken) => {
-      const session = await authApi.signInWithFacebook(accessToken);
-      return startSession(session);
-    },
-    [startSession]
+  const changePassword = useCallback(
+    async (passwordChange) =>
+      applySession(await authApi.changePassword(passwordChange)),
+    [applySession]
   );
 
   const logout = useCallback(async () => {
     await authApi.logout().catch(() => {});
-    clearToken();
-    forgetSession();
-    setUser(null);
+    dropSession();
+  }, [dropSession]);
+
+  // Reloads the account summary after a profile edit or a role change.
+  const refreshAccount = useCallback(async () => {
+    const account = await authApi.getMe();
+    setUser(account.user);
+    setEmployee(account.employee ?? null);
+    setMustChangePassword(Boolean(account.mustChangePassword));
+    return account;
   }, []);
 
-  const updateUser = useCallback((nextUser) => {
-    setUser(nextUser);
+  const applyEmployee = useCallback((nextEmployee) => {
+    setEmployee(nextEmployee ?? null);
   }, []);
 
   const authValue = useMemo(
     () => ({
       user,
+      employee,
+      mustChangePassword,
       loading,
       login,
-      register,
-      verifyEmail,
-      loginWithGoogle,
-      loginWithFacebook,
       logout,
-      updateUser,
+      changePassword,
+      refreshAccount,
+      applySession,
+      applyEmployee,
     }),
     [
       user,
+      employee,
+      mustChangePassword,
       loading,
       login,
-      register,
-      verifyEmail,
-      loginWithGoogle,
-      loginWithFacebook,
       logout,
-      updateUser,
+      changePassword,
+      refreshAccount,
+      applySession,
+      applyEmployee,
     ]
   );
 

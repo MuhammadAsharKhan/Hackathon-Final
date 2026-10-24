@@ -1,130 +1,211 @@
-import { useEffect, useRef, useState } from "react";
-import { Users } from "lucide-react";
-import Badge from "@/components/ui/Badge";
-import EmptyState from "@/components/ui/EmptyState";
-import ErrorState from "@/components/ui/ErrorState";
+import { useState } from "react";
+import { Plus } from "lucide-react";
+import toast from "react-hot-toast";
+import DataTable from "@/components/data/DataTable";
+import FilterBar from "@/components/data/FilterBar";
+import Button from "@/components/ui/Button";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import PageHeader from "@/components/ui/PageHeader";
-import Pagination from "@/components/ui/Pagination";
-import { Table, TableCell, TableRow } from "@/components/ui/Table";
-import { listUsers } from "@/api/users.api";
+import StatusBadge from "@/components/ui/StatusBadge";
+import CreateHrModal from "@/components/users/CreateHrModal";
+import TemporaryPasswordModal from "@/components/users/TemporaryPasswordModal";
+import { listUsers, resetUserPassword, setUserActive } from "@/api/users.api";
+import { useConfirm } from "@/hooks/useConfirm";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
-import { getErrorMessage } from "@/lib/errors";
-import { formatDate } from "@/lib/format";
-import { scrollToElement } from "@/lib/scroll";
+import { useResource } from "@/hooks/useResource";
+import { formatDateTime } from "@/lib/format";
 
 const PAGE_SIZE = 10;
-const COLUMNS = ["Name", "Email", "Role", "Joined"];
 
 export default function AdminUsers() {
   useDocumentTitle("Users");
 
-  const [users, setUsers] = useState([]);
-  const [pagination, setPagination] = useState({
-    page: 1,
-    limit: PAGE_SIZE,
-    total: 0,
-    pages: 0,
-  });
   const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [reloadToken, setReloadToken] = useState(0);
-  const listTopRef = useRef(null);
+  const [search, setSearch] = useState("");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [temporary, setTemporary] = useState(null);
+  const { ask, dialogProps } = useConfirm();
 
-  const handlePageChange = (nextPage) => {
-    setPage(nextPage);
-    scrollToElement(listTopRef.current);
+  const { data, loading, error, reload } = useResource(
+    () =>
+      listUsers({
+        role: "hr",
+        page,
+        limit: PAGE_SIZE,
+        search: search || undefined,
+      }),
+    [page, search]
+  );
+
+  const users = data?.users || [];
+  const pagination = data?.pagination;
+
+  const handleCreated = (result) => {
+    setCreateOpen(false);
+    setTemporary({
+      title: "HR account created",
+      accountName: `${result.user.name} (${result.user.email})`,
+      password: result.temporaryPassword,
+    });
+    setPage(1);
+    reload();
   };
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError("");
+  const toggleActive = (user) => {
+    const nextActive = !user.isActive;
 
-    listUsers({ page, limit: PAGE_SIZE })
-      .then((usersData) => {
-        if (cancelled) return;
-        setUsers(usersData.users);
-        setPagination(usersData.pagination);
-      })
-      .catch((requestError) => {
-        if (cancelled) return;
-        setError(getErrorMessage(requestError));
-        setUsers([]);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    ask({
+      title: nextActive ? "Activate account" : "Deactivate account",
+      description: nextActive
+        ? `${user.name} can sign in again.`
+        : `${user.name} is signed out and cannot sign in until the account is activated.`,
+      confirmLabel: nextActive ? "Activate" : "Deactivate",
+      run: async () => {
+        await setUserActive(user.id, nextActive);
+        toast.success(nextActive ? "Account activated" : "Account deactivated");
+        reload();
+      },
+    });
+  };
 
-    return () => {
-      cancelled = true;
-    };
-  }, [page, reloadToken]);
+  const resetPassword = (user) => {
+    ask({
+      title: "Reset password",
+      description: `A new temporary password is created for ${user.name}.`,
+      confirmLabel: "Reset password",
+      run: async () => {
+        const result = await resetUserPassword(user.id);
+        setTemporary({
+          title: "Password reset",
+          accountName: user.name,
+          password: result.temporaryPassword,
+        });
+        reload();
+      },
+    });
+  };
+
+  const columns = [
+    {
+      key: "name",
+      header: "Name",
+      className: "font-medium",
+      render: (user) => user.name,
+    },
+    {
+      key: "email",
+      header: "Email",
+      className: "text-muted-foreground",
+      render: (user) => user.email,
+    },
+    {
+      key: "status",
+      header: "Status",
+      render: (user) => (
+        <StatusBadge
+          kind="account"
+          status={user.isActive ? "active" : "inactive"}
+        />
+      ),
+    },
+    {
+      key: "lastLogin",
+      header: "Last sign-in",
+      className: "whitespace-nowrap text-muted-foreground",
+      render: (user) =>
+        user.lastLoginAt ? formatDateTime(user.lastLoginAt) : "Never",
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      render: (user) => (
+        <div className="flex justify-end gap-1">
+          <Button variant="ghost" size="sm" onClick={() => resetPassword(user)}>
+            Reset password
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className={user.isActive ? "text-danger hover:text-danger" : undefined}
+            onClick={() => toggleActive(user)}
+          >
+            {user.isActive ? "Deactivate" : "Activate"}
+          </Button>
+        </div>
+      ),
+    },
+  ];
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Users"
-        description="Everyone with an account, newest first."
+        description="HR sign-in accounts. Every HR account has one employee record."
+        actions={
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            New HR account
+          </Button>
+        }
       />
 
-      <div ref={listTopRef} className="scroll-mt-20 space-y-6">
-        {loading ? (
-          <div className="space-y-3" aria-hidden="true">
-            {Array.from({ length: 5 }).map((_, index) => (
-              <div key={index} className="skeleton h-14 w-full" />
-            ))}
-          </div>
-        ) : error ? (
-          <ErrorState
-            title="Users did not load"
-            message={error}
-            onRetry={() => setReloadToken((token) => token + 1)}
-          />
-        ) : users.length === 0 ? (
-          <EmptyState
-            icon={Users}
-            title="No users yet"
-            description="Accounts appear here as people register."
-          />
-        ) : (
-          <Table columns={COLUMNS}>
-            {users.map((account) => (
-              <TableRow key={account.id}>
-                <TableCell className="font-medium">{account.name}</TableCell>
-                <TableCell className="text-muted-foreground">
-                  {account.email}
-                </TableCell>
-                <TableCell>
-                  <Badge
-                    className={
-                      account.role === "admin"
-                        ? "border-foreground bg-foreground text-background"
-                        : undefined
-                    }
-                  >
-                    {account.role === "admin" ? "Admin" : "User"}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {formatDate(account.createdAt)}
-                </TableCell>
-              </TableRow>
-            ))}
-          </Table>
-        )}
+      <FilterBar
+        search={{
+          value: search,
+          onChange: (value) => {
+            setSearch(value);
+            setPage(1);
+          },
+          placeholder: "Search by name or email",
+          label: "Search HR accounts",
+        }}
+      />
 
-        {!loading && !error ? (
-          <Pagination
-            page={pagination.page}
-            pages={pagination.pages}
-            total={pagination.total}
-            onChange={handlePageChange}
-            itemLabel="users"
-            itemLabelSingular="user"
-          />
-        ) : null}
-      </div>
+      <DataTable
+        columns={columns}
+        rows={users}
+        loading={loading}
+        error={error}
+        errorTitle="Accounts did not load"
+        onRetry={reload}
+        empty={{
+          title: search ? "No account matches this search" : "No HR accounts yet",
+          description: search
+            ? "Try a different name or email."
+            : "Create the first HR account to hand over people management.",
+        }}
+        pagination={
+          pagination
+            ? {
+                page: pagination.page,
+                pages: pagination.pages,
+                total: pagination.total,
+                onChange: setPage,
+                itemLabel: "accounts",
+                itemLabelSingular: "account",
+                disabled: loading,
+              }
+            : undefined
+        }
+      />
+
+      {createOpen ? (
+        <CreateHrModal
+          open={createOpen}
+          onClose={() => setCreateOpen(false)}
+          onCreated={handleCreated}
+        />
+      ) : null}
+
+      <TemporaryPasswordModal
+        open={Boolean(temporary)}
+        onClose={() => setTemporary(null)}
+        title={temporary?.title}
+        accountName={temporary?.accountName}
+        password={temporary?.password}
+      />
+
+      <ConfirmDialog {...dialogProps} />
     </div>
   );
 }

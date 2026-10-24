@@ -2,18 +2,6 @@ import http from "./http";
 
 const unwrap = (response) => response.data.data;
 
-export const sendChat = (chatInput) =>
-  http.post("/ai/chat", chatInput).then(unwrap);
-
-export const listConversations = () =>
-  http.get("/ai/conversations").then(unwrap);
-
-export const getConversation = (uid) =>
-  http.get(`/ai/conversations/${uid}`).then(unwrap);
-
-export const deleteConversation = (uid) =>
-  http.delete(`/ai/conversations/${uid}`).then(unwrap);
-
 export const listAiKeys = () => http.get("/admin/ai/keys").then(unwrap);
 
 export const createAiKey = (keyInput) =>

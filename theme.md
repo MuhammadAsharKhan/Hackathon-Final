@@ -1,6 +1,6 @@
 # Theme
 
-The interface is white, near-black and quiet. Structure comes from 1px hairlines and spacing, not from shadows, gradients or color. A future prompt can say "follow theme.md" and get the same look.
+The interface is white, near-black and quiet, with one deep teal accent. Structure comes from 1px hairlines and spacing, not from shadows, gradients or color. A future prompt can say "follow theme.md" and get the same look.
 
 ## Tokens
 
@@ -11,10 +11,12 @@ Defined as CSS variables in `client/src/index.css` and mapped to Tailwind in `cl
 | `--background` | `#ffffff` | `bg-background` | Page and card background |
 | `--foreground` | `#0a0a0a` | `text-foreground` | Primary text, primary button fill |
 | `--surface` | `#fafafa` | `bg-surface` | Secondary hover, subtle panels |
+| `--surface-tint` | `#f0fdfa` | `bg-surface-tint` | Stat cards and the active menu row |
 | `--muted` | `#f4f4f5` | `bg-muted` | Ghost hover, skeletons |
 | `--muted-foreground` | `#71717a` | `text-muted-foreground` | Descriptions, hints, meta text |
 | `--border` | `#e4e4e7` | `border-border` | Every hairline, inputs, dividers |
-| `--primary` | `#0a0a0a` | `bg-primary` | Primary action |
+| `--primary` | `#0f766e` | `bg-primary`, `text-primary` | Primary action, active menu, accent text |
+| `--primary-hover` | `#115e59` | `bg-primary-hover` | Primary button hover |
 | `--primary-foreground` | `#ffffff` | `text-primary-foreground` | Text on primary |
 | `--danger` | `#dc2626` | `text-danger`, `bg-danger` | Destructive action, field errors |
 | `--success` | `#16a34a` | `text-success` | Completed status, success toast icon |
@@ -24,7 +26,8 @@ Rules:
 
 - Never hardcode a hex value in a component. Use the token utilities or `var(--...)`.
 - No gradients, no colored section backgrounds, no decorative illustration.
-- One accent at most per screen. `danger` appears only for destructive actions and errors; `success` only for completed status and success feedback.
+- Teal is the only accent: primary buttons, the active menu row, accent status chips and the tinted stat surface. `danger` appears only for destructive actions and errors; `success` only for completed status and success feedback.
+- Status colors come from `StatusBadge`. Do not pick a chip color by hand in a page.
 
 ## Typography
 
@@ -64,51 +67,52 @@ Pages compose shared components. Do not hand-write a `button`, `input`, `select`
 
 | Component | Use |
 | --- | --- |
-| `Avatar` | User photo or initials at `sm`, `md` or `lg`. |
-| `Badge` | Item status or a short status chip. |
+| `AppShell` | Sidebar, mobile drawer, top bar and the page column. |
+| `Sidebar` | Role menu from `config/menus.js` and the signed-in footer. |
+| `Topbar` | Page title, notification bell and user menu. |
+| `NotificationBell` | Unread count polled every 30 s and the notification dropdown. |
+| `UserMenu` | Name, role, change password and sign out. |
+| `AuthLayout` | Centered shell for setup, sign-in and change password. |
+| `Footer` | Single-line product footer. |
+| `ScrollManager` | Top reset and hash scrolling for the router. |
+| `SetupGate` | Setup status redirects for every route. |
+| `ProtectedRoute` | Session, role and forced password gate. |
+| `GuestRoute` | Redirects signed-in users away from the auth screens. |
+| `Avatar` | Initials at `sm`, `md` or `lg`. |
+| `Badge` | One short chip. Statuses use `StatusBadge`. |
 | `Button` | Every action, with variant, size and loading state. |
 | `Card` | Bordered surface for grouped content and list rows. |
-| `ConfirmDialog` | Destructive confirmation built on `Modal`. |
+| `Checkbox` | Labeled checkbox, used by settings and filters. |
+| `ConfirmDialog` | Destructive confirmation built on `Modal`, with an optional error line. |
 | `Container` | Page width and horizontal padding. |
-| `CopyButton` | Clipboard action with a copied state. |
+| `CopyButton` | Clipboard action with a copied state and a fallback. |
+| `DateInput` | Native date input with label, hint and error. |
 | `Divider` | Plain separator between alternative actions. |
 | `EmptyState` | Nothing yet, no match or a dismissed error. |
 | `ErrorState` | Failed request with a retry action. |
 | `Field` | Label, hint and error wrapper for one control. |
 | `FormError` | Form-level error text. |
-| `Input` | Single-line text, email, password and number fields. |
+| `Input` | Single-line text, email, password, number and time fields. |
 | `Modal` | Dialog, focus trap, scroll lock and mobile sheet. |
+| `MonthInput` | Native month input with label, hint and error. |
 | `OtpInput` | Six digit code entry with paste and auto-advance. |
 | `PageHeader` | Page title, one-line description and actions. |
+| `PageLoading` | Page level spinner with screen reader text. |
+| `PageSection` | Titled block with an optional action row. |
 | `Pagination` | Total, page count and previous and next controls. |
 | `SectionHeading` | Section title with an optional action. |
 | `Select` | Labeled native select. |
 | `Spinner` | Loading indicator inside a button or page. |
+| `StatusBadge` | Status label and tone for attendance, leave, payroll, employee and account rows. |
 | `Table` | Table shell, row and cell. |
-| `Tabs` | Keyboard accessible tab list. |
+| `Tabs` | Keyboard accessible tab list that wraps on narrow screens. |
 | `Textarea` | Multiline text input. |
-| `Navbar` | Brand, primary links and the user menu. |
-| `AppLayout` | Navbar, main outlet, footer and profile prompt. |
-| `AuthLayout` | Centered shell for sign-in and registration. |
-| `Footer` | Single-line product footer. |
-| `ScrollManager` | Top reset and hash scrolling for the router. |
-| `ProtectedRoute` | Signed-in and role gate. |
-| `GuestRoute` | Redirects signed-in users away from auth pages. |
-| `AvatarUpload` | Preview, validate and upload a profile photo. |
-| `EmailVerificationFlow` | Email and code steps with a resend countdown. |
+| `DataTable` | Column config, skeleton rows, empty, error with retry, pagination and expandable rows. |
+| `FilterBar` | Debounced search, selects, text fields and a date range. |
+| `StatCard` | One number on the tinted surface. |
+| `ChartCard` | Titled chart card with an empty state. |
 | `ForgotPasswordModal` | Verify, then set a new password from sign-in. |
-| `CompleteProfileModal` | Age request after Google sign-in. |
-| `GoogleButton` | Google credential button when configured. |
-| `GoogleSection` | Google button plus the "or" divider. |
-| `AiChatWidget` | Floating AI panel. |
-| `ChatPanel` | Shared chat layout for page and widget. |
-| `ConversationSidebar` | Conversation list, new chat and delete. |
-| `MessageList` | Empty starters, messages, typing and retry. |
-| `MessageBubble` | User or assistant message with copy and provider. |
-| `MessageInput` | Auto-grow composer with a character limit. |
-| `TypingIndicator` | Three-dot assistant typing status. |
-| `CodeBlock` | Fenced code with a language label and copy. |
-| `Markdown` | Assistant markdown without raw HTML. |
+| `EmailVerificationFlow` | Email and code steps with a resend countdown. |
 | `KeyFormModal` | Add or replace an AI provider key. |
 | `KeyStatusBadge` | Active, cooling, invalid or disabled key chip. |
 
@@ -116,7 +120,7 @@ Pages compose shared components. Do not hand-write a `button`, `input`, `select`
 
 `Button`
 
-- Variants: `primary` (solid near-black), `secondary` (white with border), `ghost` (text only), `danger` (solid red).
+- Variants: `primary` (solid teal), `secondary` (white with border), `ghost` (text only), `danger` (solid red).
 - Sizes: `sm` 32px, `md` 40px, `lg` 44px.
 - `loading` renders a spinner, sets `aria-busy` and disables the button.
 - One primary button per view or modal footer. Secondary next to it. Ghost for inline and menu actions. Danger only behind a confirmation.
@@ -135,9 +139,8 @@ Pages compose shared components. Do not hand-write a `button`, `input`, `select`
 
 `Badge`
 
-- Status only: `todo`, `in_progress`, `done`. Labels come from `STATUS_LABELS`.
-- `todo` is muted, `in_progress` is an outlined near-black with a dot, `done` is green-tinted.
-- No counts, no categories, no custom colors.
+- One short chip in a muted or outlined style. No counts and no custom colors.
+- A domain status goes through `StatusBadge` so it keeps one label and one tone everywhere.
 
 `Modal`
 
@@ -168,6 +171,29 @@ Pages compose shared components. Do not hand-write a `button`, `input`, `select`
 
 - `h-4 w-4` inside buttons, `h-5 w-5` for page-level loading. Never colored.
 
+`StatusBadge`
+
+- `kind` names the domain (`attendance`, `leave`, `payroll`, `employee`, `account`) and `status` the value. The label and the tone come from one map in the component.
+- Tones: `success` for done, approved and active; `accent` for late, pending and probation; `danger` for absent and rejected; `muted` for off, cancelled and inactive.
+- `children` overrides the label and `tone` overrides the tone for the rare row that needs it.
+
+`DataTable`
+
+- Props: `columns` (`{ key, header, render, className }`), `rows`, `loading`, `error`, `errorTitle`, `onRetry`, `empty`, `pagination` and `renderExpanded`.
+- Loading keeps the header row and shows five skeleton rows. Empty and error replace the table body with the shared states.
+- `renderExpanded` adds a chevron column and a full width row below it. Use it for JSON, before and after blocks or long notes.
+
+`FilterBar`
+
+- Search debounces 400 ms; selects, text fields and dates call `onChange` immediately. Pages own the request and reset the page number.
+- Clear filters appears only while a value is set.
+- Below `lg` the controls stack full width; from `lg` they sit on one row.
+
+`StatCard`, `ChartCard`
+
+- StatCard puts one number on `bg-surface-tint` with a short label and an optional hint.
+- ChartCard reserves a fixed height and shows the empty message instead of empty axes.
+
 ## States
 
 - Loading: skeletons for lists and tables, spinner for button submissions and the auth bootstrap. Never flash an empty state before the first response.
@@ -187,13 +213,13 @@ Pages compose shared components. Do not hand-write a `button`, `input`, `select`
 ## Copy rules
 
 - Short, factual, neutral. Sentence case.
-- Buttons are verbs: "New item", "Save changes", "Sign out", "Delete item".
+- Buttons are verbs: "New department", "Save changes", "Post announcement", "Sign out", "Delete holiday".
 - Titles are nouns: "Dashboard", "Profile", "Users".
 - Descriptions are one sentence, no exclamation marks, no selling.
 - Errors state what happened and what to do: "Cannot reach the server. Try again." Do not blame the user.
-- Empty states are plain: "No items yet", "Create your first item to see it here."
+- Empty states are plain: "No departments yet", "Create the first department to group your people."
 - No emoji anywhere. No lorem ipsum, no placeholder marketing text, no jokes, no filler.
-- Use "item" as the domain noun in the example module; rename it consistently in a fork.
+- Use the domain nouns of the spec: employee, department, designation, leave type, holiday, announcement, account.
 
 Banned words and patterns: seamless, elevate, unlock, empower, leverage, robust, cutting-edge, streamline, effortless, revolutionize, supercharge, game-changer, powerful, next-generation, in today's, delve, journey, tailored, holistic, your all-in-one, exclamation marks, rhetorical questions and em dashes used for style.
 
@@ -203,7 +229,7 @@ Do:
 
 - Build structure with borders, spacing and type scale.
 - Use one primary action per screen and keep secondary actions quiet.
-- Reuse the components in `client/src/components/ui/`; extend them with `className` instead of forking.
+- Reuse the components in `client/src/components/ui/` and `client/src/components/data/`; extend them with `className` instead of forking.
 - Keep list rows dense: title, one line of meta, status badge, actions.
 - Keep form layouts single column inside modals.
 

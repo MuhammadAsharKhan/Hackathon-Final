@@ -1,6 +1,14 @@
-export const getErrorMessage = (error, fallback = "Something went wrong") => {
-  if (!error?.response) return "Cannot reach the server. Try again.";
-  return error.response.data?.message || fallback;
+const NETWORK_MESSAGE = "Cannot reach the server. Try again.";
+const RATE_LIMIT_MESSAGE = "Too many requests. Try again in a minute.";
+
+export const getErrorMessage = (error, fallback = "Something went wrong. Try again.") => {
+  if (!error?.response) return NETWORK_MESSAGE;
+
+  const { status, data } = error.response;
+  if (status === 429) return data?.message || RATE_LIMIT_MESSAGE;
+  if (data?.message) return data.message;
+
+  return fallback;
 };
 
 export const getFieldErrors = (error) => {
@@ -14,3 +22,5 @@ export const getFieldErrors = (error) => {
     return fields;
   }, {});
 };
+
+export const getErrorCode = (error) => error?.response?.data?.code || "";

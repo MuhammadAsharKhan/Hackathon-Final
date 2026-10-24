@@ -28,7 +28,7 @@ export default function Tabs({
     <div
       role="tablist"
       aria-label={label}
-      className={cn("flex gap-1 border-b border-border", className)}
+      className={cn("flex flex-wrap gap-1 border-b border-border", className)}
       {...props}
     >
       {tabs.map((tab, index) => {
