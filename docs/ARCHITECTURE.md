@@ -2,7 +2,7 @@
 
 The repository is a two-app monorepo: an Express API in `server/` and a React single-page app in `client/`. The root `package.json` only orchestrates install, dev, build and start. The client talks to the API over HTTP.
 
-The API is the HCM Lite backend. It now covers first-run setup, company settings, organization data, accounts, employees, attendance, leave, announcements, notifications, the audit trail and the AI key pool. Payroll, dashboards and the assistant tools are added by the later prompt files, so those routes do not exist yet. The client is still the boilerplate app until the frontend prompts replace it.
+The API is the HCM Lite backend. It covers first-run setup, company settings, organization data, accounts, employees, attendance, leave, payroll, analytics dashboards, the AI assistant, announcements, notifications and the audit trail. The client is still the boilerplate app until the frontend prompts replace it.
 
 ## File tree
 
@@ -43,6 +43,8 @@ The API is the HCM Lite backend. It now covers first-run setup, company settings
         │   ├── employee.routes.js Employee register, list, get, 360, update, salary, CSV import, export and template
         │   ├── attendance.routes.js Today, check-in, check-out, month views, board, corrections
         │   ├── leave.routes.js    Balance, preview, requests, cancel, decision
+        │   ├── payroll.routes.js  Runs, run detail, finalize, own payslips, payslip detail and PDF
+        │   ├── dashboard.routes.js Admin, HR and personal dashboards
         │   ├── announcement.routes.js  Announcement list, create, delete
         │   ├── notification.routes.js  Own notifications, unread count, mark read
         │   ├── audit.routes.js    Read-only audit log for the admin
@@ -66,6 +68,8 @@ The API is the HCM Lite backend. It now covers first-run setup, company settings
         │   ├── Attendance.js      One record per employee and date, stored status and worked minutes
         │   ├── AttendanceCorrection.js  Requested times, reason and decision
         │   ├── LeaveRequest.js    Type, dates, working days, status and decision
+        │   ├── PayrollRun.js      One row per month, draft or finalized, with totals
+        │   ├── Payslip.js         One row per employee and month, full snapshot of the numbers
         │   ├── User.js            name, email, password hash, role, employeeId, isActive, mustChangePassword, sessions
         │   ├── AuditLog.js        Append-only trail, rejects every update and delete
         │   ├── Notification.js    One row per user, readAt for the unread count
@@ -87,9 +91,21 @@ The API is the HCM Lite backend. It now covers first-run setup, company settings
         │   ├── attendanceService.js   Today, check-in and check-out, month views, board, corrections, range reader
         │   ├── leaveCalc.js           Pure leave counting, overlap and balance helpers
         │   ├── leaveService.js        Balances, preview, apply, cancel and decision
+        │   ├── payrollCalc.js         Pure gross, tax slabs and payslip numbers
+        │   ├── payrollService.js      Draft creation and recalculation, finalize, payslip reads
+        │   ├── payslipPdf.js          pdfkit payslip stream
+        │   ├── analyticsCalc.js      Pure headcount, rates, attrition and tenure helpers
+        │   ├── analyticsService.js    One exported function per metric, one day read per request
+        │   ├── dashboardService.js    Composes the three dashboard payloads
         │   ├── setupService.js        Environment bootstrap, atomic first-run setup, leave type seeds
-        │   ├── aiProviders.js         Gemini and OpenAI-compatible calls
-        │   ├── aiKeyPool.js           Key claiming, rotation and cooldown
+        │   ├── aiProviders.js         Gemini and OpenAI-compatible calls, with tool calling
+        │   ├── aiKeyPool.js           Key claiming, rotation and cooldown, one call at a time
+        │   ├── aiAssistant.js         The chat loop: system prompt, tools, budget
+        │   ├── aiTools.js             Role-scoped tool schemas and executors
+        │   ├── aiPrompts.js           Policy text, system prompt and the leave calendar table
+        │   ├── aiSummary.js           Dashboard summary with rule-based fallback bullets
+        │   ├── aiSmartLeave.js        Plain language leave request to dates
+        │   ├── aiLog.js               AiLog writer for every AI request
         │   └── aiSetup.js             Seeds the AI key and settings from the environment
         ├── validators/            One schema file per resource plus common.validators.js
         ├── utils/
@@ -153,7 +169,7 @@ The API is the HCM Lite backend. It now covers first-run setup, company settings
 - `POST /api/employees` creates the login and the employee record together: role `employee`, `mustChangePassword: true`, a ten-character temporary password returned once, a welcome notification and an `employee.register` audit entry.
 - Employee codes come from `employeeService.allocateEmployeeCode()`, an atomic counter that yields `EMP-0001`, `EMP-0002`, and so on and skips a code that already exists.
 - `GET /api/employees` filters by `search` (name, code or email), department, designation and status, with paging. Rows carry the department and designation names next to their ids.
-- `GET /api/employees/:id/360?month=YYYY-MM` returns `{ profile, attendance: { month, summary, days }, leaveBalances, recentLeaves, payslips }`. `payslips` stays an empty array until the payroll module writes it. An employee may read only their own 360 view.
+- `GET /api/employees/:id/360?month=YYYY-MM` returns `{ profile, attendance: { month, summary, days }, leaveBalances, recentLeaves, payslips }`, where `payslips` holds the finalized payslips of the last twelve months. An employee may read only their own 360 view.
 - `PATCH /api/employees/:id` edits details and the exit date. Clearing the exit date reactivates the login.
 - `PATCH /api/employees/:id/salary` takes `basicSalary`, `hraPercent` and `medicalPercent`. HR cannot change their own salary; the admin may change the salary of HR employees only.
 - CSV import accepts a multipart field named `file`, at most 1 MB and 2000 rows. `?dryRun=true` returns `{ totalRows, validRows, errors: [{ row, field, reason }] }`. A real import refuses with 422 and the same report when any row has an error, otherwise it creates the employees and their logins and returns `{ created: [{ code, name, email, temporaryPassword }] }`. The allowed columns are `code,name,email,phone,address,gender,dateOfBirth,department,designation,joinDate,status,basicSalary`.
@@ -189,15 +205,48 @@ The API is the HCM Lite backend. It now covers first-run setup, company settings
 - HR cannot decide their own request. The admin may decide requests that belong to HR employees.
 - Leave submission notifies every HR user, and the admin too when the requester is HR. Corrections use the same rule.
 
+## Payroll
+
+`services/payrollCalc.js` is pure: `grossOf`, `annualTax` and `calculatePayslip({ employee, month, settings, holidaySet, days, today })`. The rules follow spec 4.5 with the attendance days from `getEmployeeDaysForRange`, so payroll never derives a day a second way. Days after today and off days never become a deduction; the exit date itself stays inside the eligible window.
+
+`services/payrollService.js`:
+
+- `POST /api/payroll/runs { month }` (HR) creates a draft, or replaces the payslips of an existing draft with 200. A finalized month, or a month after the current one, answers 409 or 422.
+- Every payslip is built in memory first, then the draft's payslips are deleted and inserted in bulk, then the run totals are saved. A payslip stores a full snapshot of the employee code, name, department and designation, so a later salary or employee edit never changes an old payslip.
+- Finalize is admin-only: it sets `status: "finalized"`, the finalizer and the time, notifies every employee with a payslip and writes `payroll.finalize` with the totals. After that, recalculation and a second finalize answer 409, and salary edits are allowed but cannot touch the stored payslips.
+- Employees see only payslips belonging to finalized runs, and only their own. HR and admin read any payslip.
+- `GET /api/payroll/payslips/:id/pdf` streams `payslip-<code>-<YYYY-MM>.pdf` from `payslipPdf.js` (pdfkit, black on white, no images).
+
+## Analytics and dashboards
+
+- `services/analyticsCalc.js` holds the pure formulas: `isEmployedOn`, `countHeadcount`, `attritionRate`, `attendanceRateOf`, `latePercentOf`, `expectedDaysOf`, `absenteeismOf`, `tenureBucketOf` and `meanOf`. They are unit tested.
+- `services/analyticsService.js` exposes `headcountAt`, `headcount`, `attrition`, `attendanceSummary`, `attendanceTrend`, `absenteeismByDepartment`, `topLateComers`, `leaveSummary`, `payrollCost`, `averageSalary`, `headcountByDepartment`, `genderSplit`, `tenureBuckets`, `pendingApprovals`, `personalMetrics` and `searchEmployees`.
+- `loadAnalyticsRange({ from, to, departmentId, now })` loads the employees, the leave types and the attendance days once; the metric functions take that object. A dashboard request therefore reads the attendance range once, whatever the number of cards.
+- `attendanceTrend` plots only days with expected work, so weekends and holidays do not show a zero rate.
+- `services/dashboardService.js` composes `buildAdminDashboard`, `buildHrDashboard` and `buildMyDashboard`. HR and admin share the same analytics functions and the same `from`, `to`, `department` filters, so the same filters give the same numbers. An unknown department id is 400.
+- Attendance rate is `(present + late + missing_checkout + 0.5 x half_day) / (present + late + half_day + absent + missing_checkout)`. Late percent is `late / (present + late)`. Attrition is exits over the average of the headcount at both ends of the period. Payroll cost counts finalized runs only.
+
+## AI assistant
+
+- Every model call goes through `aiKeyPool.callWithPool`, so key rotation, cooldown and timeout handling apply inside the tool loop as well.
+- `aiAssistant.runChat({ user, message, conversation, now })` builds the system prompt, sends the tools allowed for the role, executes the requested tools and feeds the results back. It stops when the model answers with text, after four model calls, or at the 15 second budget. The fourth call carries no tools, so the model has to answer in text.
+- `aiTools` holds one definition per tool: a plain JSON Schema for the provider and a Zod schema for validation. `toolsForRole` is the whole role scope: Admin and HR get the six org tools plus the three own-data tools, employees get only the own-data tools. `executeTool` rejects a name outside the role scope with `{ error: "unknown_tool" }` before any query runs, so an employee naming `get_headcount` gets nothing. Invalid arguments come back as `{ error: "invalid_arguments" }` and a failing tool as `{ error: "unavailable" }`, so the model can recover instead of the request failing.
+- Tools call the same services as the dashboards (`analyticsService`, `leaveService`, `attendanceService`, `payrollService`), so a chat answer and a dashboard card always come from one calculation. No tool returns another person's salary; `search_employees` returns name, code, department, designation and status only.
+- The system prompt is rebuilt per request from the live settings and leave types: office start and grace, half day, weekend days, quotas, leave and correction rules, payroll formula and tax slabs, and who may do what. A settings change therefore changes the answers.
+- `POST /ai/dashboard-summary` builds the KPI JSON on the server with `dashboardService` for the caller's role and filters, asks for `{ bullets }` (3 to 5 short strings), validates with Zod and retries once. When the model fails or the JSON is invalid, it returns rule-based bullets from the same KPIs with `fallback: true`.
+- `POST /ai/smart-leave` sends the next 35 days as a calendar table (`YYYY-MM-DD Monday working` / `... Saturday off`), the leave type codes and the matching rules. The model returns `{ type, startDate, endDate, reason }`, which is validated, then checked with the real leave preview for the working-day count and balance. Nothing is saved.
+- `aiLimiter` is one bucket for the three model routes: 20 requests per user per hour, answering 429 `You reached the hourly limit for the assistant`. Provider failures, timeouts and missing keys answer 503 `The assistant is not available right now. Please try again in a minute.`, never provider text or a key.
+- Every request writes an `AiLog` row with the kind, the question trimmed to 500 characters, the tools used, the status and the latency. Chat exchanges are stored in `Conversation` with an atomic push, capped at 200 messages, while only the last 20 are sent to the model.
+
 ## Audit trail
 
 `AuditLog` is append-only. `pre` hooks reject `save` on an existing document, `updateOne`, `updateMany`, `findOneAndUpdate`, `replaceOne`, `deleteOne`, `deleteMany`, `findOneAndDelete` and `findOneAndReplace` with an error. The only route over the collection is the read-only `GET /api/audit` for the admin. `auditService.log` removes any key that looks like a password, hash, token, secret, OTP or credential before writing.
 
-Audited actions: `setup.complete`, `settings.update`, `department.create/update/delete`, `designation.create/update/delete`, `leaveType.create/update/delete`, `holiday.create/update/delete`, `user.createHr`, `user.activate`, `user.deactivate`, `user.resetPassword`, `employee.register`, `employee.update`, `employee.salaryUpdate`, `employee.import`, `attendance.correctionDecision`, `leave.decision`, `leave.cancel`, `announcement.create`, `announcement.delete`.
+Audited actions: `setup.complete`, `settings.update`, `department.create/update/delete`, `designation.create/update/delete`, `leaveType.create/update/delete`, `holiday.create/update/delete`, `user.createHr`, `user.activate`, `user.deactivate`, `user.resetPassword`, `employee.register`, `employee.update`, `employee.salaryUpdate`, `employee.import`, `attendance.correctionDecision`, `leave.decision`, `leave.cancel`, `payroll.create`, `payroll.recalculate`, `payroll.finalize`, `announcement.create`, `announcement.delete`.
 
 ## Notifications
 
-`notificationService.notify` writes one row, `notifyMany` writes a batch, `notifyApprovers` writes to every HR user and to the admins when the requester is HR, and `notifyActiveUsers` writes one row per active account. Unread count is `{ userId, readAt: null }`. Created now: welcome for a new account, leave submitted, leave decided, correction submitted, correction decided and announcements.
+`notificationService.notify` writes one row, `notifyMany` writes a batch, `notifyApprovers` writes to every HR user and to the admins when the requester is HR, and `notifyActiveUsers` writes one row per active account. Unread count is `{ userId, readAt: null }`. Created now: welcome for a new account, leave submitted, leave decided, correction submitted, correction decided, payroll finalized ("Your payslip for <month> is ready") and announcements.
 
 ## API contract
 
@@ -240,10 +289,24 @@ All responses are JSON. Success bodies are `{ success: true, data }`; errors are
 | GET | `/api/leave/requests?status&employeeId&from&to&page` | E own; H, A all | requests with employee names |
 | PATCH | `/api/leave/requests/:id/cancel` | owner | pending, or approved and in the future |
 | PATCH | `/api/leave/requests/:id/decision` | H; A for HR employees | `{ decision, comment }` |
+| POST | `/api/payroll/runs` | H | `{ month }`, 201 created or 200 recalculated |
+| GET | `/api/payroll/runs?page&limit` | A, H | runs with totals |
+| GET | `/api/payroll/runs/:id` | A, H | `{ run, payslips }` |
+| POST | `/api/payroll/runs/:id/finalize` | A | locks the month, notifies employees |
+| GET | `/api/payroll/payslips/me` | H, E | own finalized payslips |
+| GET | `/api/payroll/payslips/:id` | A, H any; E own finalized | payslip with the run status |
+| GET | `/api/payroll/payslips/:id/pdf` | A, H any; E own finalized | `application/pdf` |
+| GET | `/api/dashboard/admin?from&to&department` | A | headcount, attrition, payroll cost, salary, splits, tenure, audit feed |
+| GET | `/api/dashboard/hr?from&to&department` | H | today counts, approvals, trend, absenteeism, late comers, leave |
+| GET | `/api/dashboard/me` | H, E | today, week hours, late count, balances, last payslip, announcements |
 | GET, POST, DELETE | `/api/announcements` | * read; A, H write | notifies every other active user |
 | GET | `/api/notifications`, `/unread-count`; PATCH `/notifications/:id/read`, POST `/notifications/read-all` | * | own rows |
 | GET | `/api/audit?actor&action&entity&from&to&page&limit` | A | read-only |
-| POST | `/api/ai/chat`, GET `/api/ai/conversations/:id`, `/api/admin/ai/*` | as before | unchanged boilerplate routes until the AI prompt |
+| POST | `/api/ai/chat` | * | `{ message, conversationUid? }` (or `conversationId`), returns the reply, `conversationId`, `toolsUsed` and `aiGenerated` |
+| POST | `/api/ai/dashboard-summary` | A, H | `{ from?, to?, department? }` (or `departmentId`), returns `{ bullets, aiGenerated, fallback }` |
+| POST | `/api/ai/smart-leave` | H, E | `{ message }` (or `text`), returns the suggested type, dates, days and validity |
+| GET, DELETE | `/api/ai/conversations`, `/api/ai/conversations/:uid` | * | own threads only |
+| GET, POST, PATCH, DELETE | `/api/admin/ai/keys`, `/api/admin/ai/settings` | A | provider keys, models, base URLs |
 
 Status codes: 400 validation, 401 not signed in or inactive, 403 role or data scope, 404 not found, 409 conflict, 422 business rule broken, 429 rate limited.
 

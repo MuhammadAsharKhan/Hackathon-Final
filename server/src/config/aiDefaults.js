@@ -1,3 +1,5 @@
+import { config } from "./env.js";
+
 export const AI_DEFAULTS = {
   defaultProvider: "gemini",
   geminiModel: "gemini-3.5-flash-lite",

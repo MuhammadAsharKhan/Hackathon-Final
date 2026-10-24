@@ -193,6 +193,17 @@ Free MongoDB Atlas clusters and free Railway services sleep when idle. Two layer
 - Turn auto deploy off and redeploy by hand, so a half-finished commit never reaches the demo.
 - Health check path: `/api/health`. Turn serverless mode off for the same reason as Railway: the in-process rate limiter and keep-alive expect one long-running process.
 
+## AI assistant
+
+The API ships a tool-calling assistant instead of a plain chat. Every answer about company data comes from a tool that reads the same services as the dashboards, so numbers cannot drift between the assistant and a report.
+
+- `POST /api/ai/chat { message, conversationUid? }` runs the loop: system prompt, tools for the role, tool results fed back, at most four model calls and 15 seconds. The reply carries `toolsUsed` and `aiGenerated`.
+- Tools by role: Admin and HR get headcount, attendance summary, late comers, leave summary, payroll summary and employee search; everyone signed in also gets their own leave balance, attendance and last payslip. Employees get only the own-data tools, and no tool returns another person's salary.
+- `POST /api/ai/dashboard-summary` builds the KPI JSON on the server for the caller's role and filters and asks for 3 to 5 bullets, with rule-based bullets as the fallback.
+- `POST /api/ai/smart-leave { message }` turns a sentence such as "next Monday and Tuesday off for my sister's wedding" into a leave type and dates, then checks them against the real leave rules. Nothing is saved.
+- Policy answers come from text generated from the live settings and leave types, so changing the office start, the grace period or a leave quota changes the answers.
+- Keys and models live at `/api/admin/ai`. `AI_API_KEY` and `AI_PROVIDER` still seed the first key on an empty database, and the assistant is limited to 20 requests per user per hour.
+
 ## Project documentation
 
 - `docs/ARCHITECTURE.md`: file tree, request flow, auth flow, API contract and recipes for new modules.
@@ -210,5 +221,5 @@ Free MongoDB Atlas clusters and free Railway services sleep when idle. Two layer
 | CORS error in the console (`No 'Access-Control-Allow-Origin' header`) | The page is calling the API on another origin. Keep `VITE_API_URL=/api` so the dev proxy or the Vercel rewrite forwards the call, or add the page's origin to `CLIENT_URL` when the browser must reach the API directly. |
 | `[GSI_LOGGER]: The given origin is not allowed for the given client ID` | Google sign-in only runs on origins listed on the OAuth client. In Google Cloud Console, edit the web client behind `VITE_GOOGLE_CLIENT_ID` and add each exact origin with no path, for example `https://your-app.vercel.app` and `http://localhost:5173`. The client id must equal `GOOGLE_CLIENT_ID` on the API. |
 | Signed out after every request | The refresh cookie is not reaching the API. Check `COOKIE_SAMESITE`, that the request uses `credentials`, and that the client and API share a site or the client proxies `/api`. |
-| `429 Too many requests` | The login limiter allows 20 failed attempts per 15 minutes per IP; the global limiter allows 300 API requests per 15 minutes per IP; the reset routes allow 10 per 15 minutes per IP; the uid lookup allows 30 per minute. Behind two proxies set `TRUST_PROXY_HOPS=2`, otherwise every visitor shares the proxy's bucket. |
-| AI Buddy answers `503 AI Buddy is busy. Try again in a minute.` | The pool had nothing that could answer. The response `code` says which: `ai_no_active_keys` means no key was available at all (none stored, or all disabled, invalid or cooling down), `ai_keys_failed` means keys were tried and each one failed. The boot log reports how many keys were imported from the environment. Check `GET /api/admin/ai/keys` as an admin for the per-key `lastError`. |
+| `429 Too many requests` | The login limiter allows 20 failed attempts per 15 minutes per IP; the global limiter allows 300 API requests per 15 minutes per IP; the reset routes allow 10 per 15 minutes per IP; the assistant allows 20 requests per user per hour across its chat, summary and smart leave routes. Behind two proxies set `TRUST_PROXY_HOPS=2`, otherwise every visitor shares the proxy's bucket. |
+| The assistant answers `503 The assistant is not available right now. Please try again in a minute.` | The pool had nothing that could answer, the provider timed out, or every attempt failed. The response `code` says which: `ai_no_active_keys` means no key was available at all (none stored, or all disabled, invalid or cooling down), `ai_keys_failed` means keys were tried and each one failed, `ai_timeout` means the 15 second budget ran out. The boot log reports how many keys were imported from the environment. Check `GET /api/admin/ai/keys` as an admin for the per-key `lastError`. |

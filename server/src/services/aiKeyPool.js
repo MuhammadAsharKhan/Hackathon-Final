@@ -74,7 +74,12 @@ const markKeyFailure = async (key, providerError) => {
   );
 };
 
-const requestProviderReply = (key, settings, messages, timeoutMs) => {
+const requestProviderReply = (
+  key,
+  settings,
+  { messages, tools = [], systemPrompt },
+  timeoutMs
+) => {
   const apiKey = decryptSecret(key.encryptedKey);
   if (!apiKey) {
     throw new ProviderError("auth", "Stored key could not be read");
@@ -89,24 +94,30 @@ const requestProviderReply = (key, settings, messages, timeoutMs) => {
     apiKey,
     model,
     baseUrl,
-    systemPrompt: settings.systemPrompt,
+    systemPrompt: systemPrompt ?? settings.systemPrompt,
     messages,
+    tools,
     timeoutMs,
   });
 };
 
-const answerWithProviderKey = async (key, settings, messages, timeoutMs) => {
-  const reply = await requestProviderReply(key, settings, messages, timeoutMs);
+const answerWithProviderKey = async (key, settings, request, timeoutMs) => {
+  const answer = await requestProviderReply(key, settings, request, timeoutMs);
   const model =
     key.provider === "gemini" ? settings.geminiModel : settings.grokModel;
 
-  return { reply: reply || EMPTY_REPLY, provider: key.provider, model };
+  return {
+    text: answer.text || (answer.toolCalls?.length ? "" : EMPTY_REPLY),
+    toolCalls: answer.toolCalls ?? [],
+    provider: key.provider,
+    model,
+  };
 };
 
 const tryAvailableKeys = async (
   providers,
   settings,
-  messages,
+  request,
   triedKeyIds,
   deadline
 ) => {
@@ -123,7 +134,7 @@ const tryAvailableKeys = async (
       return await answerWithProviderKey(
         key,
         settings,
-        messages,
+        request,
         Math.min(ATTEMPT_TIMEOUT_MS, remainingMs)
       );
     } catch (providerError) {
@@ -135,23 +146,31 @@ const tryAvailableKeys = async (
   return null;
 };
 
-export const chatWithPool = async ({ settings, messages }) => {
+// One model call through the key pool. The assistant loop calls this for every
+// step, so a failing key rotates to the next one inside a single conversation.
+export const callWithPool = async ({
+  settings,
+  messages,
+  tools = [],
+  systemPrompt,
+  deadline = Date.now() + DEADLINE_MS,
+}) => {
   const triedKeyIds = [];
   const providers = orderProviders(settings.defaultProvider);
 
   const answer = await tryAvailableKeys(
     providers,
     settings,
-    messages,
+    { messages, tools, systemPrompt },
     triedKeyIds,
-    Date.now() + DEADLINE_MS
+    deadline
   );
   if (answer) return answer;
 
   // The client shows one message either way, but the code tells an operator
   // whether there was nothing to try or every key that was tried failed.
   const code = triedKeyIds.length > 0 ? KEYS_FAILED : NO_ACTIVE_KEY;
-  console.warn(`AI chat failed (${code}): ${triedKeyIds.length} key(s) tried`);
+  console.warn(`AI request failed (${code}): ${triedKeyIds.length} key(s) tried`);
 
   throw new ApiError(503, ALL_FAILED, undefined, code);
 };
@@ -160,9 +179,11 @@ export const testAiKey = async (key) => {
   const settings = await loadAiSettings();
 
   try {
-    const reply = await requestProviderReply(key, settings, [
-      { role: "user", content: "Reply with the word ok" },
-    ]);
+    const reply = (
+      await requestProviderReply(key, settings, {
+        messages: [{ role: "user", content: "Reply with the word ok" }],
+      })
+    ).text;
     await AiKey.updateOne(
       { _id: key.id },
       { $set: { status: "active", lastError: "", cooldownUntil: null } }

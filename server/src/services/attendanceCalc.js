@@ -119,8 +119,15 @@ const readRecordForDate = (records, date) => {
   return records[date] ?? null;
 };
 
-const leavesOn = (approvedLeaveDates, date) =>
-  Boolean(approvedLeaveDates?.has?.(date));
+// A Set marks a leave date without its type. A Map carries the type code and
+// whether the type is paid, which payroll needs for its unpaid day count.
+const leaveFor = (approvedLeaveDates, date) => {
+  if (!approvedLeaveDates) return null;
+  if (typeof approvedLeaveDates.get === "function") {
+    return approvedLeaveDates.get(date) ?? null;
+  }
+  return approvedLeaveDates.has(date) ? { leaveTypeCode: null, leavePaid: null } : null;
+};
 
 // One entry per day. The order of the rules is the order in the specification:
 // employment, future, calendar, leave, record, absent.
@@ -151,8 +158,14 @@ export const buildEmployeeDays = ({
     if (!working) {
       return { ...entry, status: "off" };
     }
-    if (leavesOn(approvedLeaveDates, date)) {
-      return { ...entry, status: "on_leave" };
+    const leave = leaveFor(approvedLeaveDates, date);
+    if (leave) {
+      return {
+        ...entry,
+        status: "on_leave",
+        leaveTypeCode: leave.leaveTypeCode ?? null,
+        leavePaid: leave.leavePaid ?? null,
+      };
     }
     if (record) {
       if (!record.checkOut && date < today) {

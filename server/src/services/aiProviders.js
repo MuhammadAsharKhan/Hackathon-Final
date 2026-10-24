@@ -78,12 +78,53 @@ const throwProviderError = async (response) => {
   );
 };
 
+const safeArguments = (value) => {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value;
+  if (typeof value !== "string" || value.trim() === "") return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const geminiContents = (messages) =>
+  messages.map((message) => {
+    if (message.role === "assistant") {
+      const parts = [];
+      if (message.content) parts.push({ text: message.content });
+      for (const call of message.toolCalls ?? []) {
+        parts.push({ functionCall: { name: call.name, args: call.arguments ?? {} } });
+      }
+      return { role: "model", parts };
+    }
+
+    if (message.role === "tool") {
+      const response = safeArguments(message.content);
+      return {
+        role: "user",
+        parts: [
+          {
+            functionResponse: {
+              name: message.name,
+              response: { result: response },
+            },
+          },
+        ],
+      };
+    }
+
+    return { role: "user", parts: [{ text: message.content }] };
+  });
+
 export const askGemini = async ({
   apiKey,
   model,
   baseUrl,
   systemPrompt,
   messages,
+  tools = [],
   timeoutMs,
 }) => {
   const url = `${baseUrl}/models/${model}:generateContent`;
@@ -92,10 +133,13 @@ export const askGemini = async ({
     { "x-goog-api-key": apiKey },
     {
       systemInstruction: { parts: [{ text: systemPrompt }] },
-      contents: messages.map((message) => ({
-        role: message.role === "assistant" ? "model" : "user",
-        parts: [{ text: message.content }],
-      })),
+      contents: geminiContents(messages),
+      ...(tools.length > 0
+        ? {
+            tools: [{ functionDeclarations: tools }],
+            toolConfig: { functionCallingConfig: { mode: "AUTO" } },
+          }
+        : {}),
     },
     timeoutMs
   );
@@ -103,14 +147,58 @@ export const askGemini = async ({
   if (!response.ok) await throwProviderError(response);
 
   const responseBody = await readJsonResponse(response);
-  const contentParts =
-    responseBody.candidates?.[0]?.content?.parts || [];
+  const parts = responseBody.candidates?.[0]?.content?.parts || [];
 
-  return contentParts
-    .map((part) => part.text || "")
+  const text = parts
+    .filter((part) => typeof part.text === "string")
+    .map((part) => part.text)
     .join("")
     .trim();
+
+  const toolCalls = parts
+    .filter((part) => part.functionCall?.name)
+    .map((part, index) => ({
+      id: `gemini-${index}`,
+      name: part.functionCall.name,
+      arguments: safeArguments(part.functionCall.args),
+    }));
+
+  return { text, toolCalls };
 };
+
+const openAiMessages = (systemPrompt, messages) => [
+  { role: "system", content: systemPrompt },
+  ...messages.map((message) => {
+    if (message.role === "assistant") {
+      return {
+        role: "assistant",
+        content: message.content || null,
+        ...(message.toolCalls?.length
+          ? {
+              tool_calls: message.toolCalls.map((call) => ({
+                id: call.id,
+                type: "function",
+                function: {
+                  name: call.name,
+                  arguments: JSON.stringify(call.arguments ?? {}),
+                },
+              })),
+            }
+          : {}),
+      };
+    }
+
+    if (message.role === "tool") {
+      return {
+        role: "tool",
+        tool_call_id: message.toolCallId,
+        content: message.content,
+      };
+    }
+
+    return { role: "user", content: message.content };
+  }),
+];
 
 export const askGrok = async ({
   apiKey,
@@ -118,6 +206,7 @@ export const askGrok = async ({
   baseUrl,
   systemPrompt,
   messages,
+  tools = [],
   timeoutMs,
 }) => {
   const url = `${baseUrl}/chat/completions`;
@@ -126,13 +215,13 @@ export const askGrok = async ({
     { Authorization: `Bearer ${apiKey}` },
     {
       model,
-      messages: [
-        { role: "system", content: systemPrompt },
-        ...messages.map((message) => ({
-          role: message.role,
-          content: message.content,
-        })),
-      ],
+      messages: openAiMessages(systemPrompt, messages),
+      ...(tools.length > 0
+        ? {
+            tools: tools.map((tool) => ({ type: "function", function: tool })),
+            tool_choice: "auto",
+          }
+        : {}),
     },
     timeoutMs
   );
@@ -140,7 +229,15 @@ export const askGrok = async ({
   if (!response.ok) await throwProviderError(response);
 
   const responseBody = await readJsonResponse(response);
-  return String(
-    responseBody.choices?.[0]?.message?.content || ""
-  ).trim();
+  const choice = responseBody.choices?.[0]?.message ?? {};
+
+  const toolCalls = (choice.tool_calls ?? [])
+    .filter((call) => call.function?.name)
+    .map((call) => ({
+      id: call.id,
+      name: call.function.name,
+      arguments: safeArguments(call.function.arguments),
+    }));
+
+  return { text: String(choice.content || "").trim(), toolCalls };
 };

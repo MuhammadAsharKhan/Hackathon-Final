@@ -30,11 +30,17 @@ export const otpLimiter = rateLimit({
   message: tooManyRequests,
 });
 
-export const aiChatLimiter = rateLimit({
-  windowMs: 60 * 1000,
+// Every AI route shares this bucket, so one person cannot spend the model
+// budget through several endpoints.
+export const aiLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
   limit: 20,
   standardHeaders: "draft-7",
   legacyHeaders: false,
   keyGenerator: (req) => req.user.id,
-  message: tooManyRequests,
+  message: {
+    success: false,
+    message: "You reached the hourly limit for the assistant",
+    code: "ai_rate_limited",
+  },
 });

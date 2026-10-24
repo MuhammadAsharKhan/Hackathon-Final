@@ -17,6 +17,7 @@ import {
   getRecentLeaves,
 } from "./leaveService.js";
 import { notify, notifyMany } from "./notificationService.js";
+import { payslipsForEmployee } from "./payrollService.js";
 import { getSettings } from "./settingsService.js";
 
 const CODE_COUNTER = "employeeCode";
@@ -311,14 +312,16 @@ export const getEmployee360 = async (
     month ?? todayIn(settings?.timezone, currentInstant).slice(0, 7);
   const { start, end } = monthBounds(monthValue);
 
-  const [daysByEmployee, leaveBalances, recentLeaves, rows] = await Promise.all([
-    getEmployeeDaysForRange([String(employee.id)], start, end, {
-      now: currentInstant,
-    }),
-    getBalancesForEmployee(employee.id, undefined, currentInstant),
-    getRecentLeaves(employee.id),
-    rowsFor([employee]),
-  ]);
+  const [daysByEmployee, leaveBalances, recentLeaves, rows, payslips] =
+    await Promise.all([
+      getEmployeeDaysForRange([String(employee.id)], start, end, {
+        now: currentInstant,
+      }),
+      getBalancesForEmployee(employee.id, undefined, currentInstant),
+      getRecentLeaves(employee.id),
+      rowsFor([employee]),
+      payslipsForEmployee(employee.id),
+    ]);
 
   const days = daysByEmployee.get(String(employee.id)) ?? [];
 
@@ -331,8 +334,7 @@ export const getEmployee360 = async (
     },
     leaveBalances: leaveBalances.balances,
     recentLeaves,
-    // The payroll module fills this once payslips exist.
-    payslips: [],
+    payslips,
   };
 };
 

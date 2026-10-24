@@ -1,21 +1,17 @@
 import Conversation from "../models/Conversation.js";
 import ApiError from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { loadAiSettings } from "../services/aiSetup.js";
-import { chatWithPool } from "../services/aiKeyPool.js";
+import { runChat } from "../services/aiAssistant.js";
+import { runLoggedAi } from "../services/aiLog.js";
+import { summarizeDashboard } from "../services/aiSummary.js";
+import { suggestLeave } from "../services/aiSmartLeave.js";
 
-const HISTORY_LIMIT = 20;
 // MongoDB stops at 16 MB per document. Keeping the newest exchanges means a
 // long thread never reaches that ceiling.
 const MAX_STORED_MESSAGES = 200;
 // The message schema is 8000 characters. A model can answer longer than that,
 // so the stored and returned reply is capped instead of failing the save.
 const MAX_MESSAGE_CHARS = 8000;
-
-const toProviderMessage = (message) => ({
-  role: message.role,
-  content: message.content,
-});
 
 const findOwnedConversation = async (conversationUid, userId) => {
   const conversation = await Conversation.findOne({
@@ -26,64 +22,87 @@ const findOwnedConversation = async (conversationUid, userId) => {
   return conversation;
 };
 
-const saveExchange = async (conversation, userMessage, assistantReply) => {
+const saveExchange = async (conversation, userId, userMessage, assistantReply) => {
   const exchange = [
     { role: "user", content: userMessage, createdAt: new Date() },
     { role: "assistant", content: assistantReply, createdAt: new Date() },
   ];
 
-  if (conversation.isNew) {
-    conversation.messages.push(...exchange);
-    await conversation.save();
-    return;
+  if (!conversation) {
+    return Conversation.create({
+      owner: userId,
+      title: userMessage.slice(0, 40),
+      messages: exchange,
+    });
   }
 
   await Conversation.updateOne(
     { _id: conversation.id },
     { $push: { messages: { $each: exchange, $slice: -MAX_STORED_MESSAGES } } }
   );
+
+  return conversation;
 };
 
 export const chat = asyncHandler(async (req, res) => {
-  const { conversationUid, message } = req.body;
-  const settings = await loadAiSettings();
+  const { message } = req.body;
+  const conversationRef = req.body.conversationUid ?? req.body.conversationId;
 
-  let conversation = conversationUid
-    ? await findOwnedConversation(conversationUid, req.user.id)
+  const conversation = conversationRef
+    ? await findOwnedConversation(conversationRef, req.user.id)
     : null;
 
-  // Send the last 20 messages as context, but keep the full thread in Mongo.
-  const history = conversation
-    ? conversation.messages.slice(-HISTORY_LIMIT).map(toProviderMessage)
-    : [];
-
-  const providerAnswer = await chatWithPool({
-    settings,
-    messages: [...history, { role: "user", content: message }],
+  const answer = await runLoggedAi({
+    user: req.user,
+    kind: "chat",
+    message,
+    execute: () => runChat({ user: req.user, message, conversation }),
   });
-  const replyText = providerAnswer.reply.slice(0, MAX_MESSAGE_CHARS);
 
-  if (!conversation) {
-    conversation = new Conversation({
-      owner: req.user.id,
-      title: message.slice(0, 40),
-    });
-  }
-
-  await saveExchange(conversation, message, replyText);
+  const replyText = String(answer.reply ?? "").slice(0, MAX_MESSAGE_CHARS);
+  const saved = await saveExchange(conversation, req.user.id, message, replyText);
 
   res.json({
     success: true,
     data: {
-      conversation: {
-        uid: conversation.uid,
-        title: conversation.title,
-      },
+      conversationId: saved.uid,
+      conversation: { uid: saved.uid, title: saved.title },
       reply: { role: "assistant", content: replyText },
-      provider: providerAnswer.provider,
-      model: providerAnswer.model,
+      toolsUsed: answer.toolsUsed ?? [],
+      aiGenerated: true,
     },
   });
+});
+
+export const dashboardSummary = asyncHandler(async (req, res) => {
+  const body = req.body ?? {};
+  const filters = {
+    from: body.from,
+    to: body.to,
+    department: body.department ?? body.departmentId,
+  };
+
+  const summary = await runLoggedAi({
+    user: req.user,
+    kind: "summary",
+    message: JSON.stringify(filters),
+    execute: () => summarizeDashboard(req.user, filters),
+  });
+
+  res.json({ success: true, data: summary });
+});
+
+export const smartLeave = asyncHandler(async (req, res) => {
+  const message = req.body.message ?? req.body.text;
+
+  const suggestion = await runLoggedAi({
+    user: req.user,
+    kind: "smart_leave",
+    message,
+    execute: () => suggestLeave(req.user, message),
+  });
+
+  res.json({ success: true, data: suggestion });
 });
 
 export const listConversations = asyncHandler(async (req, res) => {

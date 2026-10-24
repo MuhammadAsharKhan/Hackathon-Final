@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { isAllowedAiBaseUrl } from "../config/aiDefaults.js";
+import { dateStringSchema, objectIdSchema } from "./common.validators.js";
 
-const objectIdSchema = z.string().regex(/^[0-9a-fA-F]{24}$/, "Invalid id");
 const conversationUidSchema = z
   .string()
   .regex(/^\d{9}$/, "Invalid conversation uid");
@@ -19,12 +19,31 @@ const apiKeySchema = z
 
 export const chatSchema = z.object({
   conversationUid: conversationUidSchema.optional(),
+  conversationId: conversationUidSchema.optional(),
   message: z
     .string()
     .trim()
     .min(1, "Message is required")
-    .max(4000, "Message must be at most 4000 characters"),
+    .max(1000, "Message must be at most 1000 characters"),
 });
+
+// The dashboards filter by department and the specification names the same
+// field departmentId, so both spellings are accepted.
+export const dashboardSummarySchema = z.object({
+  from: dateStringSchema.optional(),
+  to: dateStringSchema.optional(),
+  department: objectIdSchema.optional(),
+  departmentId: objectIdSchema.optional(),
+});
+
+export const smartLeaveRequestSchema = z
+  .object({
+    message: z.string().trim().min(3).max(500).optional(),
+    text: z.string().trim().min(3).max(500).optional(),
+  })
+  .refine((value) => Boolean(value.message || value.text), {
+    message: "Describe the leave you want",
+  });
 
 export const conversationParamsSchema = z.object({
   uid: conversationUidSchema,

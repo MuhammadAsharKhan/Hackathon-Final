@@ -1,9 +1,11 @@
 import { Router } from "express";
 import {
   chat,
+  dashboardSummary,
   deleteConversation,
   getConversation,
   listConversations,
+  smartLeave,
 } from "../controllers/ai.controller.js";
 import {
   createAiKey,
@@ -15,7 +17,7 @@ import {
   updateAiSettings,
 } from "../controllers/aiAdmin.controller.js";
 import { protect, restrictTo } from "../middleware/auth.js";
-import { aiChatLimiter } from "../middleware/rateLimit.js";
+import { aiLimiter } from "../middleware/rateLimit.js";
 import { validate } from "../middleware/validate.js";
 import {
   aiKeyIdSchema,
@@ -23,12 +25,30 @@ import {
   chatSchema,
   conversationParamsSchema,
   createAiKeySchema,
+  dashboardSummarySchema,
+  smartLeaveRequestSchema,
   updateAiKeySchema,
 } from "../validators/ai.validators.js";
 
 const router = Router();
 
-router.post("/ai/chat", protect, aiChatLimiter, validate(chatSchema), chat);
+router.post("/ai/chat", protect, aiLimiter, validate(chatSchema), chat);
+router.post(
+  "/ai/dashboard-summary",
+  protect,
+  restrictTo("admin", "hr"),
+  aiLimiter,
+  validate(dashboardSummarySchema),
+  dashboardSummary
+);
+router.post(
+  "/ai/smart-leave",
+  protect,
+  restrictTo("hr", "employee"),
+  aiLimiter,
+  validate(smartLeaveRequestSchema),
+  smartLeave
+);
 router.get("/ai/conversations", protect, listConversations);
 router.get(
   "/ai/conversations/:uid",

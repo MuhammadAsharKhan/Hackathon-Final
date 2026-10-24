@@ -4,6 +4,7 @@ import Department from "../models/Department.js";
 import Designation from "../models/Designation.js";
 import Employee from "../models/Employee.js";
 import LeaveRequest from "../models/LeaveRequest.js";
+import LeaveType from "../models/LeaveType.js";
 import ApiError from "../utils/ApiError.js";
 import { now } from "../utils/clock.js";
 import { eachDay, monthBounds, todayIn, zonedToUtc } from "../utils/dates.js";
@@ -104,7 +105,7 @@ export const getEmployeeDaysForRange = async (
   if (ids.length === 0) return daysByEmployee;
 
   const { settings, holidaySet } = await getCalendar(from, to);
-  const [employees, records, leaves] = await Promise.all([
+  const [employees, records, leaves, leaveTypes] = await Promise.all([
     Employee.find({ _id: { $in: ids } }).lean(),
     Attendance.find({
       employeeId: { $in: ids },
@@ -116,9 +117,14 @@ export const getEmployeeDaysForRange = async (
       startDate: { $lte: to },
       endDate: { $gte: from },
     })
-      .select("employeeId startDate endDate")
+      .select("employeeId leaveTypeCode startDate endDate")
       .lean(),
+    LeaveType.find().select("code isPaid").lean(),
   ]);
+
+  const paidByType = new Map(
+    leaveTypes.map((leaveType) => [leaveType.code, leaveType.isPaid])
+  );
 
   const today = todayIn(settings?.timezone, currentInstant);
 
@@ -132,12 +138,16 @@ export const getEmployeeDaysForRange = async (
   const leaveDatesByEmployee = new Map();
   for (const leave of leaves) {
     const key = String(leave.employeeId);
-    if (!leaveDatesByEmployee.has(key)) leaveDatesByEmployee.set(key, new Set());
+    if (!leaveDatesByEmployee.has(key)) leaveDatesByEmployee.set(key, new Map());
 
     const start = leave.startDate > from ? leave.startDate : from;
     const end = leave.endDate < to ? leave.endDate : to;
+    const leaveInfo = {
+      leaveTypeCode: leave.leaveTypeCode,
+      leavePaid: paidByType.get(leave.leaveTypeCode) ?? null,
+    };
     for (const day of eachDay(start, end)) {
-      leaveDatesByEmployee.get(key).add(day);
+      leaveDatesByEmployee.get(key).set(day, leaveInfo);
     }
   }
 
@@ -152,7 +162,7 @@ export const getEmployeeDaysForRange = async (
         settings,
         holidaySet,
         records: recordsByEmployee.get(key) ?? new Map(),
-        approvedLeaveDates: leaveDatesByEmployee.get(key) ?? new Set(),
+        approvedLeaveDates: leaveDatesByEmployee.get(key) ?? new Map(),
         today,
       })
     );
