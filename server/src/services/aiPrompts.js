@@ -54,7 +54,7 @@ export const buildSystemPrompt = ({ user, settings, leaveTypes, today }) => {
   const weekday = WEEKDAY_NAMES[weekdayOf(today)];
 
   return [
-    `You are the assistant inside ${settings.companyName || "the company"} HCM, a human capital management app.`,
+    `You are the assistant inside ${settings.companyName || "the company"} S.M.I.T-Lite, a human capital management app.`,
     `Today is ${today} (${weekday}) in the company timezone ${settings.timezone}.`,
     `You are talking to ${user.name}, whose role is ${user.role}.`,
     "",

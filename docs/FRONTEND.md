@@ -1,6 +1,6 @@
 # Frontend
 
-The client is a Vite + React 18 single page app in `client/`. It is the HCM Lite interface described in `prompts/00-SPEC.md`; this document records what is built, where it lives and how it is wired.
+The client is a Vite + React 18 single page app in `client/`. It is the S.M.I.T-Lite interface described in `prompts/00-SPEC.md`; this document records what is built, where it lives and how it is wired.
 
 Design tokens, typography and component rules live in `theme.md`. The server contract lives in `docs/ARCHITECTURE.md` and `server/src/routes`.
 
@@ -162,3 +162,22 @@ Every data view has a loading, empty and error state, forms disable while submit
 
 - The payroll runs table shows the finalized date but not the finalizer name, because the server stores the user id without populating it.
 - Chart data is repeated as a visually hidden text summary for screen readers rather than as a data table.
+
+## Design system and components
+
+The interface follows `theme.md`. Tokens live in `client/src/index.css` (CSS
+variables) and `client/tailwind.config.js` (the Tailwind mapping); components
+reference them and never hard-code a colour, radius or shadow.
+
+- `components/brand/` holds the mark (`Logo`, live-text wordmark) and the
+  three-bar loader (`BarsLoader`), which also backs `Spinner` and `PageLoading`.
+- `components/ui/` is the component library: `Button`, `Input`, `PasswordInput`,
+  `Textarea`, `Field`, `Select` (a custom listbox over a hidden native select),
+  `DateInput` and `MonthInput` (popover pickers that still emit `YYYY-MM-DD` and
+  `YYYY-MM` strings), `Checkbox`, `Radio`, `Switch`, `Tabs`, `SegmentedControl`,
+  `StatusBadge`/`StatusPill` (one central status map), `Avatar`, `Modal`,
+  `Drawer`, `ConfirmDialog`, `Table`, `Pagination`, `Skeleton`, `Tooltip`,
+  `Progress`, `Divider`, `Kbd`, `EmptyState` and `ErrorState`.
+- `/dev/ui` renders `components/ui/Showcase`, every component in every state, in
+  development only. The import is dropped from production bundles.
+- `node scripts/contrast-check.mjs` prints the contrast table for the tokens.

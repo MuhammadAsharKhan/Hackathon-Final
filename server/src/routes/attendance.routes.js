@@ -1,16 +1,21 @@
 import { Router } from "express";
 import {
+  deleteEmployeeFace,
+  deleteOwnFace,
   getAttendanceBoard,
   getCorrections,
   getEmployeeAttendance,
   getMyAttendance,
+  getOwnFaceStatus,
   getToday,
   patchCorrection,
   postCheckIn,
   postCheckOut,
   postCorrection,
+  postFaceEnroll,
 } from "../controllers/attendance.controller.js";
 import { protect, restrictTo } from "../middleware/auth.js";
+import { faceEnrollLimiter } from "../middleware/rateLimit.js";
 import { validate } from "../middleware/validate.js";
 import {
   attendanceMonthQuerySchema,
@@ -22,6 +27,8 @@ import {
   correctionListQuerySchema,
   createCorrectionSchema,
   employeeAttendanceParamsSchema,
+  faceEnrollSchema,
+  faceRemoveParamsSchema,
 } from "../validators/attendance.validators.js";
 
 const router = Router();
@@ -35,6 +42,21 @@ router.post(
   restrictTo("hr", "employee"),
   validate(checkOutSchema),
   postCheckOut
+);
+router.get("/face/status", restrictTo("hr", "employee"), getOwnFaceStatus);
+router.post(
+  "/face/enroll",
+  restrictTo("hr", "employee"),
+  faceEnrollLimiter,
+  validate(faceEnrollSchema),
+  postFaceEnroll
+);
+router.delete("/face/enroll", restrictTo("hr", "employee"), deleteOwnFace);
+router.delete(
+  "/face/:employeeId/enroll",
+  restrictTo("hr"),
+  validate(faceRemoveParamsSchema, "params"),
+  deleteEmployeeFace
 );
 router.get(
   "/me",

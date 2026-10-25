@@ -86,6 +86,16 @@ const employeeSchema = new mongoose.Schema(
       ref: "User",
       default: null,
     },
+    faceDescriptor: {
+      type: [Number],
+      select: false,
+      default: undefined,
+    },
+    faceEnrolledAt: {
+      type: Date,
+      default: null,
+      select: false,
+    },
   },
   { timestamps: true }
 );
@@ -109,6 +119,7 @@ employeeSchema.set("toJSON", {
     json.id = json._id.toString();
     delete json._id;
     delete json.__v;
+    delete json.faceDescriptor;
     return json;
   },
 });

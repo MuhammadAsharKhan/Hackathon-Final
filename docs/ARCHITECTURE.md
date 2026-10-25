@@ -2,7 +2,7 @@
 
 The repository is a two-app monorepo: an Express API in `server/` and a React single-page app in `client/`. The root `package.json` only orchestrates install, dev, build and start. The client talks to the API over HTTP.
 
-The API is the HCM Lite backend. It covers first-run setup, company settings, organization data, accounts, employees, attendance, leave, payroll, analytics dashboards, the AI assistant, announcements, notifications and the audit trail. The client is the full interface for the same features, one screen per module, with the assistant panel available on every page.
+The API is the S.M.I.T-Lite backend. It covers first-run setup, company settings, organization data, accounts, employees, attendance, leave, payroll, analytics dashboards, the AI assistant, announcements, notifications and the audit trail. The client is the full interface for the same features, one screen per module, with the assistant panel available on every page.
 
 ## File tree
 
@@ -193,7 +193,10 @@ The API is the HCM Lite backend. It covers first-run setup, company settings, or
 
 - `getEmployeeDaysForRange(employeeIds, from, to, { now })` returns `Map<employeeId, day entries>` and is the shared reader for payroll and dashboards. Keep the signature stable. It loads settings, the holiday set, the employees, the attendance records and the approved leaves in a fixed number of queries, whatever the number of employees.
 - Check-in and check-out stamp the server time, use the company date and store the status at write time, so a later settings change never rewrites history. A second check-in is 409, a check-out without a check-in is 422, a second check-out is 409, and approved leave covering today blocks a check-in with 422. Check-in is allowed on weekends and holidays.
-- When `lat` and `lng` are sent and the office location is set, the distance is stored. `source: "camera"` is accepted only with exactly one face, an accuracy of 100 meters or better, an office location and a distance inside `radiusMeters`; otherwise it is 422 with the reason. `source: "web"` never rejects on location.
+- When `lat` and `lng` are sent and the office location is set, the distance is stored. `source: "camera"` is accepted only with exactly one face, an accuracy of 100 meters or better, an office location and a distance inside `radiusMeters`; otherwise it is 422 with the reason, and the location reasons also carry an `errors` item with `field: "location"`. `source: "web"` never rejects on location, and check-out accepts the same optional fields without applying the camera rules.
+- Camera check-in stores `source: "camera"`, `faceCount` and `location { lat, lng, accuracy, distanceMeters }`; the distance is recomputed on the server from the settings and never taken from the browser. No image, frame or template is stored or sent by this path. The board row and every day entry carry `source` and, for the board, `distanceMeters`, so the calendar, the board and the 360 view can label a camera record.
+- `evaluateCameraLocation` is the only place that decides the camera rules (one face, accuracy of 100 m or better, office location set, distance inside the radius). `assertSourceAllowsLocation` calls it for `source: "camera"` and turns the verdict into `ApiError(422, reason, errors)`; the function is exported so the rules can be tested without a database.
+- Face enrolment is server only for now: `POST /attendance/face/enroll`, `DELETE /attendance/face/enroll`, `DELETE /attendance/face/:employeeId/enroll` (HR) and `GET /attendance/face/status`. `faceDescriptor` and `faceEnrolledAt` are `select: false`, never returned by a route and never written to an audit entry; the enrol route is limited to 10 writes per user per hour. `compareDescriptors` in `services/faceMatch.js` is the pure Euclidean comparison, and a camera check-in that carries a descriptor compares it against the enrolled template, storing `faceMatch { distance, matched }` and answering 422 when the distance is 0.5 or more.
 - Corrections accept a past or current date, at least one time and a reason of five characters or more. One pending request per date. Approving writes the attendance record with `source: "correction"`, converts the times with `zonedToUtc` and recomputes the worked minutes and status; when there is no record yet, both times are required. Rejection needs a comment.
 - HR cannot decide their own correction. The admin may decide corrections that belong to HR employees.
 
@@ -283,7 +286,11 @@ All responses are JSON. Success bodies are `{ success: true, data }`; errors are
 | POST | `/api/employees/import?dryRun=true\|false` | H | multipart `file`, report |
 | GET | `/api/employees/export`, `/api/employees/import/template` | H | `text/csv` |
 | GET | `/api/attendance/today` | H, E | `{ date, record, status, canCheckIn, canCheckOut }` |
-| POST | `/api/attendance/check-in`, `/check-out` | H, E | optional location and source |
+| POST | `/api/attendance/check-in`, `/check-out` | H, E | optional `{ source, faceCount, lat, lng, accuracy, descriptor }`; the camera rules apply to check-in only |
+| GET | `/api/attendance/face/status` | H, E | `{ enrolled, enrolledAt }` of the caller |
+| POST | `/api/attendance/face/enroll` | H, E | `{ descriptor }` of 128 numbers, 10 writes per hour |
+| DELETE | `/api/attendance/face/enroll` | H, E | removes the caller's template |
+| DELETE | `/api/attendance/face/:employeeId/enroll` | H | removes an employee's template |
 | GET | `/api/attendance/me?month` | H, E | `{ month, days, summary }` |
 | GET | `/api/attendance/board?date&departmentId&search&status&page` | A, H | one row per active employee |
 | GET | `/api/attendance/employee/:employeeId?month` | A, H | `{ month, days, summary }` |
@@ -354,14 +361,14 @@ client/src/
 │   ├── payroll/             PayslipDrawer and the PDF button
 │   ├── ai/                  AssistantPanel, AssistantProvider, MessageBubble, CodeBlock, TypingIndicator
 │   ├── employees/           Form, salary, CSV import and the four 360 tabs
-│   ├── attendance/          CheckInPanel, calendar, correction modals, summary
+│   ├── attendance/          CheckInPanel, camera dialog, calendar, correction modals, summary
 │   ├── leave/               Balance cards, request form, smart leave box, decision modal
 │   ├── organization/        Company settings and the four organization panels
 │   ├── users/               Create HR and the one time password dialog
 │   └── ui/                  Buttons, inputs, cards, modal, badges, states
 ├── context/                 AuthContext, SetupContext, CompanyTimeContext
-├── hooks/                   useResource, useConfirm, useAssistant, useDocumentTitle, useHrEmployeeIds
-└── lib/                     errors, format, time, chart, download, navigation, validation, tokenStore
+├── hooks/                   useResource, useConfirm, useAssistant, useCameraCheckIn, useDocumentTitle, useHrEmployeeIds
+└── lib/                     errors, mediaErrors, format, time, chart, download, navigation, validation, tokenStore
 ```
 
 - `useResource(loader, deps)` gives every screen `{ data, loading, error, reload }`; a list renders `DataTable`, which owns skeletons, the empty state, the error state with retry, pagination and row clicks.
@@ -369,10 +376,12 @@ client/src/
 - The assistant lives once in `AppShell` through `AssistantProvider`; a page calls `useAssistantPanel().openAssistant()`. The panel, the markdown renderer and recharts are lazy loaded, which keeps the main bundle small.
 - Charts read their colours from the CSS variables through `client/src/lib/chart.js` and always carry a visually hidden text summary.
 - `formatMoney` writes the `PKR` prefix and groups thousands; `formatTime` and `formatDateTimeIn` print instants in the company timezone from `CompanyTimeContext`.
+- `hooks/useCameraCheckIn.js` owns the whole camera check-in: it loads `@vladmandic/face-api` with a dynamic `import()` only when the dialog opens, tries the `webgl` backend and falls back to `cpu`, loads the tiny detector from `/models` once and keeps the promise at module level. The hook also runs the camera, the detection loop, the location fix, the state machine and every cleanup; `components/attendance/CameraCheckInModal.jsx` only renders that state. `lib/mediaErrors.js` turns a browser media failure into one plain sentence for the camera and the microphone, so another screen can reuse it.
+- The detector and its TensorFlow runtime form one lazy chunk of about 1.3 MB, which is why `client/vite.config.js` raises the chunk size notice to 1400 kB; a normal page never downloads it. `import.meta.env.DEV` guards a small test hook (`window.__faceTest`) that replaces the detection result in development only, and the production bundle contains no trace of it.
 
 ## Checks
 
-- `server/test/*.test.js` with `npm test --prefix server` covers the pure rules: dates, haversine, money, temporary passwords, day derivation, attendance timing and geofence, leave, payroll, analytics, the AI policy text, the leave calendar table, the role to tool map and the summary fallback.
+- `server/test/*.test.js` with `npm test --prefix server` covers the pure rules: dates, haversine, money, temporary passwords, day derivation, attendance timing, the camera rules and their validators, the face descriptor comparison, leave, payroll, analytics, the AI policy text, the leave calendar table, the role to tool map and the summary fallback.
 - `scripts/demo-check.mjs` plays the demo and refuses to run when setup is complete, so the hosted copy stays empty.
 - `scripts/rbac-matrix.mjs` walks every route as admin, HR, employee and anonymous, then checks object scope, the setup guard, the health route and that no response carries a hash, a token or a provider key.
 - `scripts/reset-db.js` drops the database named on the command line and nothing else.

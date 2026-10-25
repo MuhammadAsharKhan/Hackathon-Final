@@ -133,7 +133,9 @@ export default function EmailVerificationFlow({
           disabled={countdown > 0 || sending}
           loading={sending}
         >
-          {countdown > 0 ? `Resend in ${countdown}s` : "Resend code"}
+          {countdown > 0
+            ? `Resend in 0:${String(countdown).padStart(2, "0")}`
+            : "Resend code"}
         </Button>
         {lockEmail ? null : (
           <Button

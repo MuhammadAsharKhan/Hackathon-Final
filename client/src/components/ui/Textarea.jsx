@@ -3,14 +3,20 @@ import { cn } from "@/lib/cn";
 import Field, { fieldDescriptionId } from "./Field";
 
 const Textarea = forwardRef(function Textarea(
-  { label, error, hint, className, id, rows = 4, ...props },
+  { label, error, hint, required, className, id, rows = 4, ...props },
   ref
 ) {
   const autoId = useId();
   const textareaId = id || autoId;
 
   return (
-    <Field id={textareaId} label={label} error={error} hint={hint}>
+    <Field
+      id={textareaId}
+      label={label}
+      error={error}
+      hint={hint}
+      required={required}
+    >
       <textarea
         ref={ref}
         id={textareaId}
@@ -18,8 +24,12 @@ const Textarea = forwardRef(function Textarea(
         aria-invalid={error ? true : undefined}
         aria-describedby={fieldDescriptionId(textareaId, error, hint)}
         className={cn(
-          "w-full resize-y rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground transition-colors duration-150 placeholder:text-muted-foreground focus:border-foreground disabled:cursor-not-allowed disabled:opacity-60",
-          error && "border-danger focus:border-danger",
+          "w-full resize-y rounded-control border bg-[#F5F8FD] px-3.5 py-3 text-[15px] text-text placeholder:text-muted",
+          "focus:bg-surface focus:outline-none focus:ring-4",
+          "disabled:cursor-not-allowed disabled:opacity-60",
+          error
+            ? "border-status-rose bg-status-rose-bg/50 focus:border-status-rose focus:ring-status-rose/15"
+            : "border-transparent hover:border-[#D3DDEE] focus:border-blue focus:ring-blue/15",
           className
         )}
         {...props}

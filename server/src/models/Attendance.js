@@ -54,6 +54,13 @@ const attendanceSchema = new mongoose.Schema(
       type: Number,
       default: null,
     },
+    faceMatch: {
+      type: {
+        distance: { type: Number, default: null },
+        matched: { type: Boolean, default: null },
+      },
+      default: null,
+    },
   },
   { timestamps: true }
 );

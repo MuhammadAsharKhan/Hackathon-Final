@@ -1,9 +1,10 @@
 import { Link } from "react-router-dom";
+import { Banknote, Receipt, UserMinus, Users, Wallet } from "lucide-react";
 import { BarChartBox, LineChartBox, PieChartBox } from "@/components/charts/ChartBoxes";
+import StatStrip from "@/components/dashboard/StatStrip";
 import DataTable from "@/components/data/DataTable";
 import Card from "@/components/ui/Card";
 import PageSection from "@/components/ui/PageSection";
-import StatCard from "@/components/ui/StatCard";
 import { useCompanyTimeZone } from "@/context/CompanyTimeContext";
 import { formatDateTimeIn, formatMoney, formatRatio } from "@/lib/format";
 import { monthLabel } from "@/lib/time";
@@ -93,40 +94,47 @@ export default function AdminDashboard({ data, loading, error, onRetry, filters 
 
   return (
     <div className="space-y-8">
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-        <StatCard
-          label="Headcount"
-          value={loading ? "-" : (data?.headcount?.count ?? 0)}
-          hint={data?.headcount?.date ? `On ${data.headcount.date}` : undefined}
-        />
-        <StatCard
-          label="Attrition YTD"
-          value={loading ? "-" : formatRatio(data?.attritionYtd?.rate)}
-          hint={
-            data?.attritionYtd
-              ? `${data.attritionYtd.exits} exits this year`
-              : undefined
-          }
-        />
-        <StatCard
-          label={`Payroll ${month ? monthLabel(month) : "this month"}`}
-          value={loading ? "-" : formatMoney(currentMonth?.net ?? 0)}
-          hint="Net of finalized runs"
-          valueClassName="text-lg"
-        />
-        <StatCard
-          label="Finalized payroll"
-          value={loading ? "-" : formatMoney(totalFinalized)}
-          hint="Every finalized run in view"
-          valueClassName="text-lg"
-        />
-        <StatCard
-          label="Average salary"
-          value={loading ? "-" : formatMoney(weightedAverage(departmentSalary))}
-          hint="Gross of active people"
-          valueClassName="text-lg"
-        />
-      </div>
+      <StatStrip
+        segments={[
+          {
+            label: "Headcount",
+            icon: Users,
+            tone: "blue",
+            value: data?.headcount?.count ?? 0,
+            hint: data?.headcount?.date ? data.headcount.date : undefined,
+            text: loading ? "-" : undefined,
+          },
+          {
+            label: "Attrition year to date",
+            icon: UserMinus,
+            tone: "rose",
+            value: 0,
+            text: loading ? "-" : formatRatio(data?.attritionYtd?.rate),
+            hint: data?.attritionYtd ? `${data.attritionYtd.exits}` : undefined,
+          },
+          {
+            label: `Payroll ${month ? monthLabel(month) : "this month"}`,
+            icon: Wallet,
+            tone: "lime",
+            value: 0,
+            text: loading ? "-" : formatMoney(currentMonth?.net ?? 0),
+          },
+          {
+            label: "Finalized payroll",
+            icon: Receipt,
+            tone: "violet",
+            value: 0,
+            text: loading ? "-" : formatMoney(totalFinalized),
+          },
+          {
+            label: "Average salary",
+            icon: Banknote,
+            tone: "slate",
+            value: 0,
+            text: loading ? "-" : formatMoney(weightedAverage(departmentSalary)),
+          },
+        ]}
+      />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <BarChartBox

@@ -20,6 +20,7 @@ import {
 } from "./attendanceCalc.js";
 import { log } from "./auditService.js";
 import { getCalendar } from "./calendarService.js";
+import { compareDescriptors } from "./faceMatch.js";
 import { notify, notifyApprovers } from "./notificationService.js";
 import { getSettings } from "./settingsService.js";
 
@@ -202,7 +203,7 @@ const readLocation = (settings, payload) => {
   };
 };
 
-const assertSourceAllowsLocation = (settings, payload) => {
+export const assertSourceAllowsLocation = (settings, payload) => {
   if ((payload.source ?? "web") !== "camera") return;
 
   const verdict = evaluateCameraLocation({
@@ -213,7 +214,30 @@ const assertSourceAllowsLocation = (settings, payload) => {
     faceCount: payload.faceCount,
   });
 
-  if (!verdict.allowed) throw new ApiError(422, verdict.reason);
+  if (verdict.allowed) return;
+
+  const errors = verdict.field
+    ? [{ field: verdict.field, message: verdict.reason }]
+    : undefined;
+  throw new ApiError(422, verdict.reason, errors);
+};
+
+const readFaceMatch = async (employee, payload) => {
+  if ((payload.source ?? "web") !== "camera") return null;
+  if (!payload.descriptor) return null;
+
+  const enrolled = await Employee.findById(employee.id)
+    .select("+faceDescriptor")
+    .lean();
+  const stored = enrolled?.faceDescriptor;
+  if (!stored || stored.length !== 128) return null;
+
+  const result = compareDescriptors(stored, payload.descriptor);
+  if (!result.ok || !result.matched) {
+    throw new ApiError(422, "The face does not match your enrolled face");
+  }
+
+  return { distance: round2(result.distance), matched: true };
 };
 
 export const checkIn = async (
@@ -234,6 +258,7 @@ export const checkIn = async (
   }
 
   assertSourceAllowsLocation(settings, payload);
+  const faceMatch = await readFaceMatch(employee, payload);
 
   return Attendance.create({
     employeeId: employee.id,
@@ -244,6 +269,7 @@ export const checkIn = async (
     workedMinutes: 0,
     location: readLocation(settings, payload),
     faceCount: payload.faceCount ?? null,
+    faceMatch,
   });
 };
 
@@ -260,10 +286,6 @@ export const checkOut = async (
   if (!record) throw new ApiError(422, "Check in before checking out");
   if (record.checkOut) throw new ApiError(409, "You already checked out today");
 
-  if (payload.source === "camera") {
-    assertSourceAllowsLocation(settings, payload);
-  }
-
   const { workedMinutes, status } = computeCheckOutStatus(
     record,
     currentInstant,
@@ -276,9 +298,78 @@ export const checkOut = async (
 
   const location = readLocation(settings, payload);
   if (location) record.location = location;
+  if (payload.source) record.source = payload.source;
+  if (payload.faceCount !== undefined) record.faceCount = payload.faceCount;
 
   await record.save();
   return record;
+};
+
+const FACE_TEMPLATE_LENGTH = 128;
+
+// Both face fields are excluded from every normal read, so a status check has
+// to ask for them by name. The template never leaves the server.
+const readEnrolment = async (employeeId) =>
+  Employee.findById(employeeId)
+    .select("+faceDescriptor +faceEnrolledAt")
+    .lean();
+
+const enrolmentSummary = (record) => {
+  const enrolled =
+    Array.isArray(record?.faceDescriptor) &&
+    record.faceDescriptor.length === FACE_TEMPLATE_LENGTH;
+
+  return {
+    enrolled,
+    enrolledAt: enrolled ? record.faceEnrolledAt ?? null : null,
+  };
+};
+
+export const getFaceStatus = async (actor) => {
+  const employee = await findOwnEmployee(actor.id);
+
+  return enrolmentSummary(await readEnrolment(employee.id));
+};
+
+export const enrollFace = async (
+  actor,
+  descriptor,
+  { now: currentInstant = now() } = {}
+) => {
+  const employee = await findOwnEmployee(actor.id);
+
+  await Employee.updateOne(
+    { _id: employee.id },
+    { $set: { faceDescriptor: descriptor, faceEnrolledAt: currentInstant } }
+  );
+
+  await log(actor, "face.enroll", "employee", employee.id, null, {
+    enrolledAt: currentInstant,
+  });
+
+  return { enrolled: true, enrolledAt: currentInstant };
+};
+
+export const removeFace = async (actor, employeeId = null) => {
+  const target = employeeId
+    ? await findEmployeeOrThrow(employeeId)
+    : await findOwnEmployee(actor.id);
+  const current = await readEnrolment(target.id);
+
+  if (!enrolmentSummary(current).enrolled) {
+    throw new ApiError(422, "There is no face enrolment to remove");
+  }
+
+  await Employee.updateOne(
+    { _id: target.id },
+    { $unset: { faceDescriptor: "" }, $set: { faceEnrolledAt: null } }
+  );
+
+  await log(actor, "face.remove", "employee", target.id, {
+    enrolledAt: current.faceEnrolledAt,
+  });
+
+  return { enrolled: false, enrolledAt: null };
 };
 
 const monthValueFor = async (month, currentInstant) => {
@@ -359,6 +450,8 @@ export const getBoard = async (query, { now: currentInstant = now() } = {}) => {
       checkIn: entry?.record?.checkIn ?? null,
       checkOut: entry?.record?.checkOut ?? null,
       workedMinutes: entry?.record?.workedMinutes ?? 0,
+      source: entry?.record?.source ?? null,
+      distanceMeters: entry?.record?.location?.distanceMeters ?? null,
     };
   });
 

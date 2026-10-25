@@ -59,6 +59,13 @@ export const computeCheckOutStatus = (record, instant, settings) => {
   };
 };
 
+const cameraReject = (reason, extra = {}) => ({
+  allowed: false,
+  reason,
+  distanceMeters: extra.distanceMeters ?? null,
+  field: extra.field ?? null,
+});
+
 // Camera check-in is the strict path; web check-in never rejects on location.
 export const evaluateCameraLocation = ({
   settings,
@@ -68,49 +75,37 @@ export const evaluateCameraLocation = ({
   faceCount,
 }) => {
   if (lat === undefined || lng === undefined || lat === null || lng === null) {
-    return {
-      allowed: false,
-      reason: "Camera check-in needs a location",
-      distanceMeters: null,
-    };
+    return cameraReject("Camera check-in needs a location", { field: "location" });
   }
-
   if (faceCount !== 1) {
-    return {
-      allowed: false,
-      reason: "Camera check-in needs exactly one face in the photo",
-      distanceMeters: null,
-    };
+    return cameraReject("Exactly one face must be visible");
   }
-
-  if (!(accuracy <= CAMERA_MAX_ACCURACY_METERS)) {
-    return {
-      allowed: false,
-      reason: "Camera check-in needs a location accuracy of 100 meters or better",
-      distanceMeters: null,
-    };
+  if (!(Number.isFinite(accuracy) && accuracy <= CAMERA_MAX_ACCURACY_METERS)) {
+    const shown = Number.isFinite(accuracy) ? Math.round(accuracy) : "unknown";
+    return cameraReject(
+      `Location accuracy is ${shown} m, it must be 100 m or better`,
+      { field: "location" }
+    );
   }
-
   if (!isCloseToOffice(settings)) {
-    return {
-      allowed: false,
-      reason: "The office location is not set, so camera check-in is unavailable",
-      distanceMeters: null,
-    };
+    return cameraReject(
+      "The company office location is not set. Ask your Admin",
+      { field: "location" }
+    );
   }
 
   const distance = distanceMeters(settings.officeLat, settings.officeLng, lat, lng);
   const radiusMeters = settings.radiusMeters ?? DEFAULT_RADIUS_METERS;
-
   if (distance > radiusMeters) {
-    return {
-      allowed: false,
-      reason: `You are ${Math.round(distance)} meters from the office, outside the ${radiusMeters} meter radius`,
-      distanceMeters: distance,
-    };
+    const x = Math.round(distance);
+    const y = Math.round(radiusMeters);
+    return cameraReject(
+      `You are ${x} m from the office, the allowed distance is ${y} m`,
+      { distanceMeters: distance, field: "location" }
+    );
   }
 
-  return { allowed: true, reason: null, distanceMeters: distance };
+  return { allowed: true, reason: null, distanceMeters: distance, field: null };
 };
 
 const readRecordForDate = (records, date) => {

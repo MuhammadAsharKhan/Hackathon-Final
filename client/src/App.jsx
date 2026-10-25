@@ -30,6 +30,11 @@ import Setup from "@/pages/Setup";
 
 const AdminAi = lazy(() => import("@/pages/AdminAi"));
 
+// Development only. The import is dropped from production bundles.
+const DevShowcase = import.meta.env.DEV
+  ? lazy(() => import("@/components/ui/Showcase"))
+  : null;
+
 const pageFallback = (
   <div className="flex min-h-[40vh] items-center justify-center">
     <PageLoading />
@@ -43,6 +48,17 @@ export default function App() {
 
       <Suspense fallback={pageFallback}>
         <Routes>
+          {DevShowcase ? (
+            <Route
+              path="/dev/ui"
+              element={
+                <div className="mx-auto w-full max-w-[1280px] px-4 py-8 sm:px-6 lg:px-8">
+                  <DevShowcase />
+                </div>
+              }
+            />
+          ) : null}
+
           <Route element={<SetupGate />}>
             <Route element={<AuthLayout />}>
               <Route path="/setup" element={<Setup />} />
@@ -112,26 +128,24 @@ export default function App() {
         toastOptions={{
           duration: 4000,
           style: {
-            background: "var(--background)",
-            color: "var(--foreground)",
-            border: "1px solid var(--border)",
-            borderRadius: "0.5rem",
+            background: "#FFFFFF",
+            color: "#0B1626",
+            border: "1px solid #EEF2F8",
+            borderLeft: "4px solid #1C74EF",
+            borderRadius: "14px",
             boxShadow:
-              "0 1px 2px color-mix(in srgb, var(--foreground) 6%, transparent)",
-            fontSize: "14px",
+              "0 14px 34px -8px rgba(12,38,92,0.16), 0 3px 8px rgba(12,38,92,0.06)",
+            fontFamily: "Inter Variable, Inter, system-ui, sans-serif",
+            fontSize: "13.5px",
             padding: "10px 14px",
           },
           success: {
-            iconTheme: {
-              primary: "var(--success)",
-              secondary: "var(--background)",
-            },
+            style: { borderLeft: "4px solid #4F8A1D" },
+            iconTheme: { primary: "#4F8A1D", secondary: "#FFFFFF" },
           },
           error: {
-            iconTheme: {
-              primary: "var(--danger)",
-              secondary: "var(--background)",
-            },
+            style: { borderLeft: "4px solid #BE123C" },
+            iconTheme: { primary: "#BE123C", secondary: "#FFFFFF" },
           },
         }}
       />

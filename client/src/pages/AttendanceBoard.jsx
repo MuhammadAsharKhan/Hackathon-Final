@@ -162,6 +162,17 @@ export default function AttendanceBoard() {
       render: (row) => formatClock(row.checkOut, timeZone),
     },
     {
+      key: "source",
+      header: "Source",
+      className: "whitespace-nowrap",
+      render: (row) =>
+        row.source ? (
+          <StatusBadge kind="source" status={row.source} />
+        ) : (
+          <span className="text-muted-foreground">-</span>
+        ),
+    },
+    {
       key: "hours",
       header: "Hours",
       className: "whitespace-nowrap tabular-nums",

@@ -97,6 +97,7 @@ export default function CompanySettings() {
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
   const [locating, setLocating] = useState(false);
+  const [locatedAccuracy, setLocatedAccuracy] = useState(null);
 
   if (loading) {
     return (
@@ -120,6 +121,7 @@ export default function CompanySettings() {
 
   const settings = data.settings;
   const current = form || toForm(settings);
+  const officeIsSet = current.officeLat !== "" && current.officeLng !== "";
 
   const update = (field) => (event) => {
     const { value, type, checked } = event.target;
@@ -147,15 +149,27 @@ export default function CompanySettings() {
     }
 
     setLocating(true);
+    setLocatedAccuracy(null);
     navigator.geolocation.getCurrentPosition(
       (position) => {
+        const accuracy = Math.round(position.coords.accuracy);
+
         setForm((previous) => ({
           ...(previous || current),
           officeLat: position.coords.latitude.toFixed(6),
           officeLng: position.coords.longitude.toFixed(6),
         }));
+        setLocatedAccuracy(accuracy);
         setLocating(false);
-        toast.success("Coordinates filled from this device");
+
+        if (accuracy > 100) {
+          toast.error(
+            `Location accuracy is ${accuracy} m. Camera check-in needs 100 m or better.`
+          );
+          return;
+        }
+
+        toast.success(`Coordinates filled from this device, accuracy ${accuracy} m`);
       },
       () => {
         setLocating(false);
@@ -282,7 +296,13 @@ export default function CompanySettings() {
       <Card className="p-6">
         <h2 className="text-base font-semibold tracking-tight">Office location</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Camera check-ins are accepted only inside the radius.
+          Employees using camera check-in must be within this radius. Web
+          check-in works from anywhere.
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {officeIsSet
+            ? "Camera check-in is on: the office location is set."
+            : "Camera check-in is off: the office location is not set."}
         </p>
 
         <div className="mt-4 grid gap-4 sm:grid-cols-3">
@@ -321,6 +341,21 @@ export default function CompanySettings() {
           <MapPin className="h-4 w-4" aria-hidden="true" />
           Use my current location
         </Button>
+
+        {locatedAccuracy === null ? null : (
+          <p
+            className={
+              locatedAccuracy > 100
+                ? "mt-2 text-xs text-danger"
+                : "mt-2 text-xs text-muted-foreground"
+            }
+            role="status"
+          >
+            {locatedAccuracy > 100
+              ? `This device reported an accuracy of ${locatedAccuracy} m. Camera check-in needs 100 m or better, so enter the coordinates by hand if the reading is wrong.`
+              : `This device reported an accuracy of ${locatedAccuracy} m.`}
+          </p>
+        )}
       </Card>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

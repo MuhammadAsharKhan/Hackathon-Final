@@ -1,10 +1,21 @@
-import { useEffect, useId, useRef } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { X } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Info,
+  X,
+} from "lucide-react";
 import { cn } from "@/lib/cn";
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
+
+const INTENTS = {
+  info: { chip: "bg-blue-50 text-blue-700", Icon: Info },
+  danger: { chip: "bg-status-rose-bg text-status-rose", Icon: AlertTriangle },
+  success: { chip: "bg-lime-50 text-lime-700", Icon: CheckCircle2 },
+};
 
 export default function Modal({
   open,
@@ -16,6 +27,7 @@ export default function Modal({
   className,
   dismissible = true,
   variant = "center",
+  intent,
   ...props
 }) {
   const isDrawer = variant === "drawer";
@@ -23,10 +35,21 @@ export default function Modal({
   const onCloseRef = useRef(onClose);
   const titleId = useId();
   const descriptionId = useId();
+  const [closing, setClosing] = useState(false);
 
   useEffect(() => {
     onCloseRef.current = onClose;
   }, [onClose]);
+
+  useEffect(() => {
+    if (open) setClosing(false);
+  }, [open]);
+
+  const requestClose = useCallback(() => {
+    if (!dismissible) return;
+    setClosing(true);
+    window.setTimeout(() => onCloseRef.current?.(), 120);
+  }, [dismissible]);
 
   useEffect(() => {
     if (!open) return;
@@ -38,8 +61,7 @@ export default function Modal({
     const scrollbarWidth =
       window.innerWidth - document.documentElement.clientWidth;
     const reservedGutter =
-      typeof CSS !== "undefined" &&
-      CSS.supports?.("scrollbar-gutter", "stable");
+      typeof CSS !== "undefined" && CSS.supports?.("scrollbar-gutter", "stable");
 
     document.body.style.overflow = "hidden";
     if (scrollbarWidth > 0 && !reservedGutter) {
@@ -96,6 +118,8 @@ export default function Modal({
 
   if (!open) return null;
 
+  const Intent = intent && INTENTS[intent] ? INTENTS[intent] : null;
+
   return createPortal(
     <div
       className={
@@ -106,11 +130,10 @@ export default function Modal({
     >
       <div
         className="animate-overlay-in overlay-backdrop absolute inset-0"
-        onClick={() => {
-          if (dismissible) onCloseRef.current?.();
-        }}
+        onClick={requestClose}
         aria-hidden="true"
       />
+
       <div
         ref={panelRef}
         role="dialog"
@@ -119,42 +142,66 @@ export default function Modal({
         aria-describedby={description ? descriptionId : undefined}
         tabIndex={-1}
         className={cn(
+          "relative flex flex-col bg-surface shadow-e4",
           isDrawer
-            ? "animate-panel-in relative flex h-full max-h-dvh w-full flex-col border-l border-border bg-background shadow-sm sm:max-w-xl"
-            : "animate-panel-in relative flex max-h-[calc(100dvh-1rem)] w-full max-w-lg flex-col rounded-t-xl border border-border bg-background shadow-sm sm:max-h-[calc(100dvh-2rem)] sm:rounded-xl",
+            ? "h-full max-h-dvh w-full max-w-[440px] rounded-l-modal"
+            : "max-h-[calc(100dvh-1rem)] w-full max-w-lg rounded-t-modal sm:max-h-[calc(100dvh-2rem)] sm:rounded-modal",
+          closing
+            ? "opacity-0 transition-opacity duration-100"
+            : isDrawer
+              ? "animate-drawer-right"
+              : "animate-modal-in",
           className
         )}
         {...props}
       >
-        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-border px-6 py-4">
-          <div className="space-y-1">
-            {title ? (
-              <h2 id={titleId} className="text-base font-semibold">
-                {title}
-              </h2>
+        <div className="flex shrink-0 items-start justify-between gap-4 px-6 pb-2 pt-5">
+          <div className="flex min-w-0 items-start gap-3">
+            {Intent ? (
+              <span
+                className={cn(
+                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-control",
+                  Intent.chip
+                )}
+                aria-hidden="true"
+              >
+                <Intent.Icon className="h-5 w-5" />
+              </span>
             ) : null}
-            {description ? (
-              <p id={descriptionId} className="text-sm text-muted-foreground">
-                {description}
-              </p>
-            ) : null}
+
+            <div className="min-w-0">
+              {title ? (
+                <h2
+                  id={titleId}
+                  className="font-display text-[20px] font-extrabold tracking-[-0.02em] text-text"
+                >
+                  {title}
+                </h2>
+              ) : null}
+              {description ? (
+                <p id={descriptionId} className="mt-1 text-sm text-muted">
+                  {description}
+                </p>
+              ) : null}
+            </div>
           </div>
+
           {dismissible ? (
             <button
               type="button"
-              onClick={() => onCloseRef.current?.()}
+              onClick={requestClose}
               aria-label="Close dialog"
-              className="-mr-2 -mt-2 flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground"
+              className="-mr-2 flex h-10 w-10 shrink-0 items-center justify-center rounded-control text-muted hover:bg-blue-50 hover:text-text"
             >
-              <X className="h-4 w-4" aria-hidden="true" />
+              <X className="h-[18px] w-[18px]" aria-hidden="true" />
             </button>
           ) : null}
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-5">{children}</div>
+        <div className="flex-1 overflow-y-auto px-6 pb-2 pt-3">{children}</div>
 
         {footer ? (
-          <div className="flex shrink-0 justify-end gap-2 border-t border-border px-6 py-4">
+          <div className="flex shrink-0 justify-end gap-2 border-t border-line-soft px-6 py-4">
             {footer}
           </div>
         ) : null}

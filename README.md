@@ -1,6 +1,32 @@
-# HCM Lite
+# S.M.I.T-Lite
 
-HCM Lite is a small human capital management app for a single company: first-run setup, company rules, departments and designations, employee records with CSV import, daily attendance with corrections, leave with balances and approvals, monthly payroll with locked payslips and PDFs, three role dashboards, an audit trail and an AI assistant that answers from the company's own data through role-scoped tools. An admin, HR users and employees each see only what their role and their own record allow.
+S.M.I.T-Lite is a small human capital management app for a single company: first-run setup, company rules, departments and designations, employee records with CSV import, daily attendance with corrections, leave with balances and approvals, monthly payroll with locked payslips and PDFs, three role dashboards, an audit trail and an AI assistant that answers from the company's own data through role-scoped tools. An admin, HR users and employees each see only what their role and their own record allow.
+
+## Brand and design system
+
+The product is **S.M.I.T-Lite**. `theme.md` is the source of truth for the design
+system: colour tokens, the type scale, radii, elevation, motion rules and the
+writing rules. Two files carry it in code — the CSS variables in
+`client/src/index.css` and the mapping in `client/tailwind.config.js` — and
+components never hard-code a colour, radius or shadow.
+
+- **Marks**: `client/public/brand/` holds `smit-mark.svg` (blue, light
+  backgrounds), `smit-mark-light.svg` (white, dark backgrounds), `favicon.svg`,
+  `favicon-32.png`, `apple-touch-icon.png` and `icon-512.png`. The wordmark is
+  live text, drawn by `components/brand/Logo`, never an image.
+- **The bar motif**: the mark's stacked bars run through the product as the
+  three-bar loader (`BarsLoader`, used by `Spinner`, `PageLoading` and button
+  loading), the sliding active bar in the sidebar, step indicators and meters.
+- **Fonts**: Plus Jakarta Sans Variable for headings, navigation, buttons and
+  numbers; Inter Variable for body text and tables.
+- **Motion**: one orchestrated moment per page type plus responses to the user's
+own action. Only `transform` and `opacity` animate, with `box-shadow` on
+  buttons. `prefers-reduced-motion` cuts everything to 0.01ms.
+- **Accessibility floor**: text at least 4.5:1, UI borders and icons 3:1,
+  visible focus everywhere, tap targets at least 40px, no horizontal page scroll
+  from 375px up. `node scripts/contrast-check.mjs` prints the ratio table.
+- **Dev only**: `components/ui/Showcase` renders every component in every state
+  at `/dev/ui`. It is compiled out of production builds.
 
 ## Stack
 
@@ -97,7 +123,7 @@ The assistant is optional. Without a key the app works and the assistant says it
 
 1. Import the repository, set **Root Directory** to `client`.
 2. Framework preset: Vite. Build command `npm run build`, output directory `dist`.
-3. `client/vercel.json` already rewrites `/api/:path*` to the backend and everything else to `index.html`. Change the destination to your own Railway URL.
+3. `client/vercel.json` already rewrites `/api/:path*` to the backend and everything else to `index.html`. Change the destination to your own Railway URL. It also sets the `Permissions-Policy` header that camera check-in and an embedded call need.
 4. No frontend environment variables are needed; the client calls `/api` on its own origin.
 
 ### Backend on Railway
@@ -115,7 +141,7 @@ The assistant is optional. Without a key the app works and the assistant says it
 ## Checks
 
 ```bash
-npm test --prefix server                 # 85 unit tests: dates, money, attendance, leave, payroll, analytics, AI, passwords
+npm test --prefix server                 # 96 unit tests: dates, money, attendance, camera rules, face match, leave, payroll, analytics, AI, passwords
 npm run build                            # client production build, no warnings
 npm run demo:check                       # the five minute demo against BASE_URL (default http://localhost:5000/api)
 npm run rbac:check                       # every route as admin, HR, employee and anonymous, plus object scope and a secret scan
@@ -126,6 +152,35 @@ npm run db:reset hcm_test                # drops one database, and only when the
 - `demo:check` needs an app with no setup yet. It prints `PASS`, `FAIL` or `SKIPPED` per step and exits 1 on any failure; AI steps are `SKIPPED` when no key is configured.
 - `rbac:check` runs after `demo:check` on the same database, because it signs in as the demo accounts it created.
 - The automated checks use a database named `hcm_test`; local work uses `hcm_dev`. Drop the test database when finished.
+
+## Camera attendance
+
+Camera check-in is an optional path for HR and employees next to the normal Check in button. The normal button is never disabled by it and works from any network; the camera path is the strict one.
+
+How it works:
+
+- The employee opens **Check in with camera** on My attendance. The browser asks for the camera and for the location at the same time.
+- A small face detector (`@vladmandic/face-api`, tiny detector, 224 px input) runs in the page about five times a second. It never leaves the page and no frame is uploaded or converted to an image.
+- A frame is good when it holds exactly one face, the face box is at least 20 percent of the video width and it sits near the middle. Five good frames in a row (about one second) make the Confirm button available; any bad frame resets the count.
+- The location comes from `navigator.geolocation.getCurrentPosition` with high accuracy, a 10 second timeout and no cached fix. An accuracy worse than 100 m shows a warning and a **Try again** button, up to three tries.
+- Confirm sends `{ source: "camera", faceCount: 1, lat, lng, accuracy }`. The server decides the distance with the Haversine formula, compares it with `radiusMeters` from the Organization screen and stores `source`, `faceCount` and `location { lat, lng, accuracy, distanceMeters }` on the attendance record. A rejection is 422 with the distance in the message, for example `You are 256 m from the office, the allowed distance is 150 m`.
+- The calendar day detail, the HR attendance board and the Employee 360 attendance list show a **Camera** badge for these records.
+
+The office location and the radius live on **Organization**, Company tab. Until a latitude and a longitude are saved, camera check-in is off and the screen says so.
+
+Browser requirements:
+
+- A browser with `navigator.mediaDevices.getUserMedia` and `navigator.geolocation`: current Chrome, Edge, Firefox or Safari. The camera button is hidden when either API is missing.
+- The page must be served over **https** (or from `localhost` during development). Browsers refuse the camera in a plain `http` page and the dialog explains that.
+- Both permissions have to be allowed. A blocked camera or a blocked location is explained in plain words, and the normal Check in button stays available.
+
+Privacy:
+
+- Only the result of the check is stored: the time, the face count, the coordinates, the accuracy and the distance. No photo, frame or template is sent for normal camera check-in.
+- The face detector model is served from the app itself (`client/public/models`), so opening the dialog does not call a third party.
+- Reopening the dialog closes the previous camera; closing the tab, hiding the page or finishing the check-in stops every camera track.
+
+Deployment note: `client/vercel.json` sends `Permissions-Policy: camera=(self "https://meet.jit.si"), microphone=(self "https://meet.jit.si"), geolocation=(self), display-capture=(self "https://meet.jit.si")`. The camera and the geolocation of the app keep working with it; the Jitsi origin is listed so an embedded call can use its own camera and microphone. Redeploy the frontend after changing that file.
 
 ## Functionalities
 
@@ -156,6 +211,7 @@ npm run db:reset hcm_test                # drops one database, and only when the
 | 23 | Admin dashboard: headcount, attrition, payroll cost, salaries, gender, tenure, audit feed | `components/dashboard/AdminDashboard.jsx` | Done |
 | 24 | HR dashboard: today, pending approvals, trend, absenteeism, leave, late-comers, own check-in | `components/dashboard/HrDashboard.jsx` | Done |
 | 25 | Employee dashboard: my day, hours against target, late count, balances, last payslip, announcements | `components/dashboard/MyDay.jsx` | Done |
+| 26 | Camera check-in with in-browser face detection and a geofence, optional next to the normal button | `components/attendance/CameraCheckInModal.jsx`, `hooks/useCameraCheckIn.js`, `lib/mediaErrors.js` | Done |
 
 Also built: the assistant panel on every page with role-scoped tools and Roman Urdu, the dashboard summary card with a rule-based fallback, announcements, the notification bell, the audit log screen, AI key management with rotation, and the read-only payslip PDF.
 
@@ -170,7 +226,7 @@ Also built: the assistant panel on every page with role-scoped tools and Roman U
 | Payslip PDF streamed with the same role and scope checks as the JSON | Done |
 | CSV import with a dry run and a per-row error report | Done |
 | Append-only audit log that rejects updates and deletes | Done |
-| Geofenced camera check-in (`source: "camera"` with face count, accuracy and radius) | API only, no camera capture UI |
+| Geofenced camera check-in with in-browser face detection (`source: "camera"` with face count, accuracy and radius) | Done, including the camera dialog, the live status and the camera badges |
 | Email delivery | Through Resend when `RESEND_API_KEY` is set, otherwise the reset code is printed in development |
 
 ## Known limitations and design decisions
@@ -179,6 +235,7 @@ Also built: the assistant panel on every page with role-scoped tools and Roman U
 - **Check-in is allowed on weekends and holidays.** The record is stored but off days are left out of every rate and out of payroll, so a demo on a Saturday still works.
 - **HR cannot decide its own requests and cannot change its own salary.** The admin decides requests and salaries that belong to HR employees, so nobody is blocked.
 - **No photo is stored.** The camera path sends a face count and an accuracy, not an image.
+- **The browser reports the face count.** The server checks the number, the accuracy and the distance, so the rule is enforced there, but a determined user with developer tools could send the same body by hand. Camera check-in is a policy gate, not biometric proof of presence.
 - **Payslip snapshot.** A payslip keeps a copy of the numbers and of the employee name, code, department and designation, so later edits never change history.
 - **Payroll runs show the finalized date but not who finalized it.** The server stores the user id and does not populate the name.
 - **Leave filters use the employee id.** The server filters by `employeeId`, so the screen offers a select of people instead of a name search.

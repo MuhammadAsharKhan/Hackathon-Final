@@ -4,7 +4,7 @@ Orientation for coding agents working in this repository.
 
 ## What this is
 
-HCM Lite: a human capital management app built on the hackathon MERN boilerplate. `prompts/00-SPEC.md` is the single source of truth; if code, docs or another prompt disagree with it, the spec wins.
+S.M.I.T-Lite: a human capital management app built on the hackathon MERN boilerplate. `prompts/00-SPEC.md` is the single source of truth; if code, docs or another prompt disagree with it, the spec wins.
 
 State after prompts 01 to 08: the product is complete.
 

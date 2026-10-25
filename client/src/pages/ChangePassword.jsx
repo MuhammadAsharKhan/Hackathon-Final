@@ -1,16 +1,17 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
+import { Lock } from "lucide-react";
+import PasswordStrength from "@/components/auth/PasswordStrength";
 import Button from "@/components/ui/Button";
-import Card from "@/components/ui/Card";
 import FormError from "@/components/ui/FormError";
-import Input from "@/components/ui/Input";
+import PasswordInput from "@/components/ui/PasswordInput";
 import { useAuth } from "@/hooks/useAuth";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useMountedRef } from "@/hooks/useMountedRef";
 import { getErrorMessage, getFieldErrors } from "@/lib/errors";
 import { DASHBOARD_PATH } from "@/lib/navigation";
-import { PASSWORD_HINT, validatePassword } from "@/lib/validation";
+import { validatePassword } from "@/lib/validation";
 
 const EMPTY_FORM = { currentPassword: "", newPassword: "", confirm: "" };
 
@@ -24,10 +25,7 @@ const validateChange = (values) => {
   const passwordError = validatePassword(values.newPassword);
   if (passwordError) errors.newPassword = passwordError;
 
-  if (
-    values.newPassword &&
-    values.newPassword === values.currentPassword
-  ) {
+  if (values.newPassword && values.newPassword === values.currentPassword) {
     errors.newPassword = "Choose a password different from the current one";
   }
 
@@ -88,41 +86,48 @@ export default function ChangePassword() {
   };
 
   return (
-    <Card className="p-6 sm:p-8">
-      <h1 className="text-xl font-semibold tracking-tight">Change password</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
+    <div>
+      <h1 className="font-display text-[30px] font-extrabold leading-tight tracking-[-0.02em] text-text">
+        Change password
+      </h1>
+      <p className="mt-1.5 text-[15px] text-muted">
         Other sessions are signed out when the password changes.
       </p>
 
       {mustChangePassword ? (
-        <p className="mt-4 rounded-lg border border-primary bg-surface-tint px-3 py-2 text-xs text-primary">
+        <p className="mt-5 rounded-control bg-blue-50 px-3.5 py-2.5 text-xs text-blue-700">
           Your account still uses a temporary password. Choose a new password to
           continue.
         </p>
       ) : null}
 
-      <form className="mt-6 space-y-4" onSubmit={handleSubmit} noValidate>
-        <Input
+      <form className="mt-7 space-y-4" onSubmit={handleSubmit} noValidate>
+        <PasswordInput
           label="Current password"
-          type="password"
           autoComplete="current-password"
+          leadingIcon={Lock}
           value={values.currentPassword}
           onChange={update("currentPassword")}
           error={fieldErrors.currentPassword}
+          autoFocus
         />
-        <Input
-          label="New password"
-          type="password"
-          autoComplete="new-password"
-          value={values.newPassword}
-          onChange={update("newPassword")}
-          error={fieldErrors.newPassword}
-          hint={PASSWORD_HINT}
-        />
-        <Input
+
+        <div className="space-y-2.5">
+          <PasswordInput
+            label="New password"
+            autoComplete="new-password"
+            leadingIcon={Lock}
+            value={values.newPassword}
+            onChange={update("newPassword")}
+            error={fieldErrors.newPassword}
+          />
+          <PasswordStrength value={values.newPassword} />
+        </div>
+
+        <PasswordInput
           label="Confirm new password"
-          type="password"
           autoComplete="new-password"
+          leadingIcon={Lock}
           value={values.confirm}
           onChange={update("confirm")}
           error={fieldErrors.confirm}
@@ -130,10 +135,10 @@ export default function ChangePassword() {
 
         <FormError bordered>{formError}</FormError>
 
-        <Button type="submit" className="w-full" loading={saving}>
+        <Button type="submit" size="lg" className="w-full" loading={saving}>
           Save password
         </Button>
       </form>
-    </Card>
+    </div>
   );
 }

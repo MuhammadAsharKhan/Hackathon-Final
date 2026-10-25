@@ -12,6 +12,7 @@ export default function UserMenu() {
   const [open, setOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const containerRef = useRef(null);
+  const triggerRef = useRef(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -22,7 +23,10 @@ export default function UserMenu() {
     };
 
     const handleKeyDown = (event) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
     };
 
     document.addEventListener("pointerdown", handlePointerDown);
@@ -46,19 +50,21 @@ export default function UserMenu() {
   return (
     <div ref={containerRef} className="relative">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((previous) => !previous)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="flex min-h-10 items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors duration-150 hover:bg-muted"
+        aria-label="Account menu"
+        className="flex h-10 items-center gap-2 rounded-control px-1.5 hover:bg-blue-50"
       >
         <Avatar user={user} size="sm" />
-        <span className="hidden max-w-[10rem] truncate sm:inline">
+        <span className="hidden max-w-[9rem] truncate font-display text-sm font-semibold text-text md:inline">
           {user?.name}
         </span>
         <ChevronDown
           className={cn(
-            "hidden h-4 w-4 text-muted-foreground transition-transform duration-150 sm:block",
+            "hidden h-4 w-4 text-muted transition-transform duration-150 md:block",
             open && "rotate-180"
           )}
           aria-hidden="true"
@@ -68,23 +74,29 @@ export default function UserMenu() {
       {open ? (
         <div
           role="menu"
-          className="absolute right-0 top-full z-50 mt-2 w-56 overflow-hidden rounded-xl border border-border bg-background shadow-sm"
+          className="animate-pop-in absolute right-0 top-full z-50 mt-2 w-60 origin-top-right overflow-hidden rounded-xl bg-surface p-1.5 shadow-e3"
         >
-          <div className="border-b border-border px-3 py-2">
-            <p className="truncate text-sm font-medium">{user?.name}</p>
-            <p className="truncate text-xs text-muted-foreground">
-              {ROLE_LABELS[user?.role] || "Signed in"}
-              {user?.email ? ` · ${user.email}` : ""}
+          <div className="px-2.5 py-2">
+            <p className="truncate font-display text-sm font-semibold text-text">
+              {user?.name}
             </p>
+            <p className="truncate text-xs text-muted">
+              {ROLE_LABELS[user?.role] || "Signed in"}
+            </p>
+            {user?.email ? (
+              <p className="mt-0.5 truncate text-xs text-muted">{user.email}</p>
+            ) : null}
           </div>
+
+          <div className="my-1 h-px bg-line-soft" />
 
           <Link
             to={CHANGE_PASSWORD_PATH}
             role="menuitem"
             onClick={() => setOpen(false)}
-            className="flex items-center gap-2 px-3 py-2 text-sm transition-colors duration-150 hover:bg-muted"
+            className="flex h-10 items-center gap-2.5 rounded-small px-2.5 text-sm text-text-2 hover:bg-blue-50 hover:text-text"
           >
-            <KeyRound className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            <KeyRound className="h-4 w-4 text-muted" aria-hidden="true" />
             Change password
           </Link>
 
@@ -93,9 +105,9 @@ export default function UserMenu() {
             role="menuitem"
             onClick={handleSignOut}
             disabled={signingOut}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-muted disabled:opacity-60"
+            className="flex h-10 w-full items-center gap-2.5 rounded-small px-2.5 text-left text-sm text-status-rose hover:bg-status-rose-bg disabled:opacity-60"
           >
-            <LogOut className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            <LogOut className="h-4 w-4" aria-hidden="true" />
             Sign out
           </button>
         </div>

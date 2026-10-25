@@ -1,5 +1,7 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { Wrench } from "lucide-react";
+import Logo from "@/components/brand/Logo";
 import Button from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
 import CodeBlock from "./CodeBlock";
@@ -12,10 +14,10 @@ const markdownComponents = {
   p: (props) => <p className="mt-2 first:mt-0" {...props} />,
   ul: (props) => <ul className="mt-2 list-disc space-y-1 pl-5" {...props} />,
   ol: (props) => <ol className="mt-2 list-decimal space-y-1 pl-5" {...props} />,
-  li: (props) => <li className="marker:text-muted-foreground" {...props} />,
+  li: (props) => <li className="marker:text-muted" {...props} />,
   a: (props) => (
     <a
-      className="text-primary underline-offset-4 hover:underline"
+      className="text-blue-700 underline underline-offset-4"
       target="_blank"
       rel="noreferrer"
       {...props}
@@ -25,7 +27,7 @@ const markdownComponents = {
     if (inline) {
       return (
         <code
-          className="rounded bg-muted px-1 py-0.5 text-xs tabular-nums"
+          className="rounded-[4px] bg-mist px-1 py-0.5 text-xs tabular-nums"
           {...props}
         >
           {children}
@@ -36,26 +38,38 @@ const markdownComponents = {
   },
   pre: (props) => <>{props.children}</>,
   table: (props) => (
-    <div className="mt-2 overflow-x-auto rounded-lg border border-border">
+    <div className="mt-2 overflow-x-auto rounded-small border border-line">
       <table className="w-full border-collapse text-left text-xs" {...props} />
     </div>
   ),
-  thead: (props) => <thead className="bg-surface" {...props} />,
-  th: (props) => <th className="px-3 py-2 font-medium" {...props} />,
+  thead: (props) => <thead className="bg-mist" {...props} />,
+  th: (props) => <th className="px-3 py-2 font-semibold" {...props} />,
   td: (props) => <td className="px-3 py-2" {...props} />,
-  h1: (props) => <p className="mt-3 font-medium first:mt-0" {...props} />,
-  h2: (props) => <p className="mt-3 font-medium first:mt-0" {...props} />,
-  h3: (props) => <p className="mt-3 font-medium first:mt-0" {...props} />,
-  strong: (props) => <strong className="font-medium" {...props} />,
+  h1: (props) => (
+    <p className="mt-3 font-display font-bold first:mt-0" {...props} />
+  ),
+  h2: (props) => (
+    <p className="mt-3 font-display font-bold first:mt-0" {...props} />
+  ),
+  h3: (props) => (
+    <p className="mt-3 font-display font-semibold first:mt-0" {...props} />
+  ),
+  strong: (props) => <strong className="font-semibold" {...props} />,
 };
 
-export default function MessageBubble({ message, onRetry }) {
+export default function MessageBubble({ message, onRetry, newest = false }) {
   const isUser = message.role === "user";
+  const enter = newest ? "animate-message-in" : undefined;
 
   if (message.failed) {
     return (
-      <div className="rounded-lg border border-danger/40 px-3 py-2 text-sm">
-        <p className="text-danger">That answer did not arrive.</p>
+      <div
+        className={cn(
+          "rounded-[18px] rounded-tl-[6px] bg-status-rose-bg px-3.5 py-2.5 text-sm",
+          enter
+        )}
+      >
+        <p className="text-status-rose">That answer did not arrive.</p>
         <Button variant="secondary" size="sm" className="mt-2" onClick={onRetry}>
           Try again
         </Button>
@@ -64,28 +78,51 @@ export default function MessageBubble({ message, onRetry }) {
   }
 
   return (
-    <div className={cn("flex flex-col gap-1", isUser ? "items-end" : "items-start")}>
+    <div
+      className={cn(
+        "flex flex-col gap-1.5",
+        isUser ? "items-end" : "items-start",
+        enter
+      )}
+    >
       <div
         className={cn(
-          "max-w-[90%] rounded-xl px-3 py-2 text-sm",
-          isUser
-            ? "bg-primary text-primary-foreground"
-            : "border border-border bg-surface"
+          "flex max-w-[92%] items-end gap-2",
+          isUser && "flex-row-reverse"
         )}
       >
-        {isUser ? (
-          <p className="whitespace-pre-wrap break-words">{message.content}</p>
-        ) : (
-          <div className="break-words">
-            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-              {message.content}
-            </ReactMarkdown>
-          </div>
+        {isUser ? null : (
+          <span className="mb-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-mist">
+            <Logo variant="mark" tone="dark" size="sm" />
+          </span>
         )}
+
+        <div
+          className={cn(
+            "px-3.5 py-2.5 text-sm",
+            isUser
+              ? "rounded-[18px] rounded-br-[6px] bg-brand-gradient text-white"
+              : "rounded-[18px] rounded-tl-[6px] bg-surface text-text shadow-e1"
+          )}
+        >
+          {isUser ? (
+            <p className="whitespace-pre-wrap break-words">{message.content}</p>
+          ) : (
+            <div className="break-words">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={markdownComponents}
+              >
+                {message.content}
+              </ReactMarkdown>
+            </div>
+          )}
+        </div>
       </div>
 
       {!isUser && message.toolsUsed?.length ? (
-        <p className="text-xs text-muted-foreground">
+        <p className="ml-9 inline-flex items-center gap-1.5 text-[11.5px] text-muted">
+          <Wrench className="h-3 w-3" aria-hidden="true" />
           Used: {message.toolsUsed.map(toolLabel).join(", ")}
         </p>
       ) : null}

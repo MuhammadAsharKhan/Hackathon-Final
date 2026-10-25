@@ -10,19 +10,24 @@ export function Table({
   return (
     <div
       className={cn(
-        "overflow-x-auto rounded-xl border border-border",
+        "overflow-x-auto rounded-card bg-surface shadow-e2",
         className
       )}
       {...props}
     >
-      <table className={`w-full ${minWidthClass} border-collapse text-left text-sm`}>
+      <table
+        className={cn(
+          "w-full border-collapse text-left text-sm",
+          minWidthClass
+        )}
+      >
         <thead>
-          <tr className="border-b border-border bg-surface text-xs text-muted-foreground">
+          <tr className="border-b border-line-soft">
             {columns.map((column, index) => (
               <th
                 key={`${index}-${column}`}
                 scope="col"
-                className="px-5 py-3 font-medium"
+                className="px-5 py-3 text-[12.5px] font-semibold text-muted"
               >
                 {column}
               </th>
@@ -38,7 +43,11 @@ export function Table({
 export function TableRow({ className, children, ...props }) {
   return (
     <tr
-      className={cn("border-b border-border last:border-b-0", className)}
+      className={cn(
+        "group relative border-b border-line-soft last:border-b-0",
+        "transition-colors duration-150 hover:bg-blue-50",
+        className
+      )}
       {...props}
     >
       {children}

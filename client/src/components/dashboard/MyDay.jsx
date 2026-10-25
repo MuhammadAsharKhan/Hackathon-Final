@@ -29,7 +29,7 @@ function HoursProgress({ hours, target }) {
         {done.toFixed(2)}h
       </p>
       <div
-        className="mt-3 h-2 w-full overflow-hidden rounded-full bg-muted"
+        className="mt-3 h-2 w-full overflow-hidden rounded-full bg-mist"
         role="progressbar"
         aria-valuemin={0}
         aria-valuemax={goal}

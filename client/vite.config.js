@@ -13,6 +13,12 @@ export default defineConfig({
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
   },
+  build: {
+    // The face detector and its TensorFlow runtime are one lazy chunk that only
+    // the camera dialog downloads, so the 500 kB notice would always fire.
+    chunkSizeWarningLimit: 1400,
+  },
+
   server: {
     port: 5173,
     strictPort: true,

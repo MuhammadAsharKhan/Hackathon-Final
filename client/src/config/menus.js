@@ -106,5 +106,5 @@ export const pageTitleFor = (pathname) => {
   if (prefix) return PREFIX_TITLES[prefix];
 
   const match = ALL_ITEMS.find((item) => item.to === pathname);
-  return match?.label || "HCM Lite";
+  return match?.label || "S.M.I.T-Lite";
 };

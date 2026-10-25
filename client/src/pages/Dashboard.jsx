@@ -1,12 +1,12 @@
 import { lazy, Suspense, useMemo, useState } from "react";
 import { LayoutDashboard } from "lucide-react";
+import DashboardGreeting from "@/components/dashboard/DashboardGreeting";
 import MyDay from "@/components/dashboard/MyDay";
 import SummaryCard from "@/components/dashboard/SummaryCard";
 import FilterBar from "@/components/data/FilterBar";
 import Card from "@/components/ui/Card";
 import ErrorState from "@/components/ui/ErrorState";
 import EmptyState from "@/components/ui/EmptyState";
-import PageHeader from "@/components/ui/PageHeader";
 import PageSection from "@/components/ui/PageSection";
 import { getAdminDashboard, getHrDashboard, getMyDashboard } from "@/api/dashboard.api";
 import { listDepartments } from "@/api/organization.api";
@@ -106,11 +106,39 @@ export default function Dashboard() {
     setTo(range.to);
   };
 
+  const pending = data?.hr?.pendingApprovals;
+  const waiting = pending ? (pending.leave || 0) + (pending.corrections || 0) : 0;
+
+  const greetingContext =
+    role === "hr" && pending
+      ? waiting > 0
+        ? `${pending.leave} leave and ${pending.corrections} attendance approvals are waiting for you.`
+        : "Nothing is waiting for you."
+      : DESCRIPTION[role] || "Your workspace.";
+
+  const greetingActions =
+    role === "admin"
+      ? [
+          { label: "Open payroll", to: "/payroll" },
+          { label: "Create HR login", to: "/admin/users" },
+        ]
+      : role === "hr"
+        ? [
+            { label: "Review approvals", to: "/leave/requests" },
+            { label: "Register employee", to: "/employees" },
+          ]
+        : [
+            { label: "Check in", to: "/me/attendance" },
+            { label: "Request leave", to: "/me/leave" },
+          ];
+
   return (
     <div className="space-y-8">
-      <PageHeader
-        title="Dashboard"
-        description={DESCRIPTION[role] || "Your workspace."}
+      <DashboardGreeting
+        name={user?.name}
+        timeZone={timeZone}
+        context={greetingContext}
+        actions={greetingActions}
       />
 
       {canFilter ? (

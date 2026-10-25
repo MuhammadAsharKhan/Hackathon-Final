@@ -8,15 +8,29 @@ import {
 } from "./common.validators.js";
 import { DAY_STATUSES } from "../services/attendanceCalc.js";
 
-const latitudeSchema = z.coerce.number().min(-90).max(90);
-const longitudeSchema = z.coerce.number().min(-180).max(180);
+const finiteNumber = (message) =>
+  z
+    .number({ error: message })
+    .finite({ error: message });
+
+const latitudeSchema = finiteNumber("Latitude must be a finite number")
+  .min(-90)
+  .max(90);
+const longitudeSchema = finiteNumber("Longitude must be a finite number")
+  .min(-180)
+  .max(180);
+
+export const descriptorSchema = z
+  .array(finiteNumber("Descriptor values must be finite numbers").min(-2).max(2))
+  .length(128, "A face descriptor must have 128 numbers");
 
 const locationShape = {
   lat: latitudeSchema.optional(),
   lng: longitudeSchema.optional(),
-  accuracy: z.coerce.number().nonnegative().optional(),
-  faceCount: z.coerce.number().int().min(0).max(20).optional(),
+  accuracy: finiteNumber("Accuracy must be a finite number").min(0).max(100000).optional(),
+  faceCount: finiteNumber("Face count must be a finite number").int().min(0).max(10).optional(),
   source: z.enum(["web", "camera"]).optional(),
+  descriptor: descriptorSchema.optional(),
 };
 
 export const checkInSchema = z
@@ -81,4 +95,12 @@ export const correctionListQuerySchema = z.object({
 export const correctionDecisionSchema = z.object({
   decision: z.enum(["approve", "reject"], "Decision must be approve or reject"),
   comment: z.string().trim().max(300, "Comment is too long").optional(),
+});
+
+export const faceEnrollSchema = z.object({
+  descriptor: descriptorSchema,
+});
+
+export const faceRemoveParamsSchema = z.object({
+  employeeId: objectIdSchema,
 });

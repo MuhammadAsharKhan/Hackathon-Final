@@ -70,7 +70,7 @@ export default function FilterBar({
   return (
     <div
       className={cn(
-        "flex flex-col gap-3 border-b border-border pb-6 lg:flex-row lg:items-end lg:justify-between",
+        "flex flex-col gap-3 rounded-xl bg-surface px-3 py-3 shadow-e1 lg:flex-row lg:items-center lg:justify-between",
         className
       )}
     >
@@ -101,7 +101,6 @@ export default function FilterBar({
               placeholder={field.placeholder || field.label}
               value={field.value || ""}
               onChange={(event) => field.onChange(event.target.value)}
-              className="h-10"
             />
           </div>
         ))}
@@ -131,7 +130,7 @@ export default function FilterBar({
           <Button
             variant="ghost"
             size="sm"
-            className="h-10 self-end"
+            className="h-11 shrink-0"
             onClick={onClear}
           >
             Clear filters

@@ -1,6 +1,6 @@
 # Viva guide
 
-How HCM Lite works, which files run each flow, and short answers to the questions a reviewer is likely to ask. Every path is relative to the repository root. `prompts/00-SPEC.md` is the source of truth for behaviour; this document explains the code that implements it.
+How S.M.I.T-Lite works, which files run each flow, and short answers to the questions a reviewer is likely to ask. Every path is relative to the repository root. `prompts/00-SPEC.md` is the source of truth for behaviour; this document explains the code that implements it.
 
 ## 1. First run and setup
 
@@ -60,6 +60,19 @@ Questions a reviewer may ask:
 Check-in and check-out stamp the server time and store the status at write time, so a later settings change never rewrites history. A second check-in is 409, a check-out without a check-in is 422, approved leave covering today is 422, and check-in stays allowed on weekends and holidays because a judge may demo on a Saturday.
 
 Corrections are a request plus a decision. Approving writes the record with `source: "correction"`, converts the two times with `zonedToUtc` and recomputes the status with the current settings.
+
+### Camera check-in
+
+The normal Check in button sends `{}` and always works. A second button opens the camera dialog, and everything in that dialog is owned by `client/src/hooks/useCameraCheckIn.js`:
+
+- The face check runs in the browser. `@vladmandic/face-api` is imported with a dynamic `import()` when the dialog opens, so the normal bundle stays small. The library's own TensorFlow build tries `webgl` and falls back to `cpu`, and the tiny detector (224 px input, score threshold 0.5) is loaded once from `/models` and cached in a module-level promise.
+- About five detections per second run inside `requestAnimationFrame`, throttled by a time check, and never overlap. A frame counts as good when it holds exactly one face, the box is at least 20 percent of the video width and the face is near the middle. Five good frames in a row, about one second, put the dialog into the confirmable state; any bad frame resets the counter. The status line is a live region, so a screen reader follows it.
+- The location is requested in parallel: `getCurrentPosition` with high accuracy, a ten second timeout and no cached fix. An accuracy worse than 100 m shows the accuracy in metres and offers a fresh fix, up to three tries. A denied camera or a denied location is explained in plain words and never blocks the normal button.
+- Confirm sends `{ source: "camera", faceCount: 1, lat, lng, accuracy }`. The server does not trust the browser's distance: `evaluateCameraLocation` compares the coordinates with the office location from the settings, computes the Haversine distance, and answers 422 with the reason (`Exactly one face must be visible`, `Location accuracy is 250 m, it must be 100 m or better`, `The company office location is not set. Ask your Admin`, `You are 256 m from the office, the allowed distance is 150 m`). The distance in the message is computed on the server, and the rejection for a location reason also carries an `errors` item with `field: "location"`.
+- The record stores `source`, `faceCount` and `location { lat, lng, accuracy, distanceMeters }`. No frame, image or template is uploaded or stored by this path, and the dialog says so.
+- Closing the dialog, unmounting it, hiding the tab or finishing the check-in stops every camera track, which the browser check verifies by reading `readyState` on the tracks.
+
+What the server trusts and what it does not: it trusts the company settings and its own clock and geometry, and it doubts the body. The face count and the accuracy come from the browser, so the server checks their shape (`faceCount` is an integer from 0 to 10, `accuracy` from 0 to 100000, finite numbers only) and applies the same rules to numbers a client could forge. That is why the camera path is a policy gate rather than biometric proof: a determined user with developer tools could post the same body by hand, while the distance, the radius and the office coordinates are decided only on the server.
 
 Questions a reviewer may ask:
 

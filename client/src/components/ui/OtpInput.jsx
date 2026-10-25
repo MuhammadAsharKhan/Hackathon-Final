@@ -116,8 +116,14 @@ export default function OtpInput({
           aria-invalid={error || undefined}
           disabled={disabled}
           className={cn(
-            "h-12 w-10 rounded-lg border bg-background text-center text-lg tabular-nums text-foreground transition-colors duration-150 focus:border-foreground disabled:cursor-not-allowed disabled:opacity-60 sm:w-11",
-            error ? "border-danger" : "border-border"
+            "h-14 w-12 rounded-control border text-center font-display text-[20px] font-semibold tabular-nums text-text",
+            "bg-[#F5F8FD] transition-[transform,border-color,box-shadow] duration-150 ease-brand",
+            "focus:border-blue focus:bg-surface focus:outline-none focus:ring-4 focus:ring-blue/15",
+            "disabled:cursor-not-allowed disabled:opacity-60",
+            digit && "scale-[1.04]",
+            error
+              ? "border-status-rose focus:border-status-rose focus:ring-status-rose/15"
+              : "border-transparent hover:border-[#D3DDEE]"
           )}
         />
       ))}

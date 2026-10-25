@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 
-const APP_NAME = "HCM Lite";
+const APP_NAME = "S.M.I.T-Lite";
 
 export const useDocumentTitle = (title) => {
   useEffect(() => {

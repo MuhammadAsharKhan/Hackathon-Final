@@ -1,12 +1,9 @@
-import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/cn";
+import BarsLoader from "../brand/BarsLoader";
 
-export default function Spinner({ className, ...props }) {
+/** Small bars loader, used inline and inside buttons. */
+export default function Spinner({ size = 16, className, ...props }) {
   return (
-    <Loader2
-      className={cn("h-5 w-5 animate-spin", className)}
-      aria-hidden="true"
-      {...props}
-    />
+    <BarsLoader size={size} className={cn("shrink-0", className)} {...props} />
   );
 }

@@ -4,11 +4,14 @@ import {
   checkOut,
   createCorrection,
   decideCorrection,
+  enrollFace,
   getBoard,
   getEmployeeMonth,
+  getFaceStatus,
   getMyMonth,
   getTodayView,
   listCorrections,
+  removeFace,
 } from "../services/attendanceService.js";
 
 export const getToday = asyncHandler(async (req, res) => {
@@ -78,5 +81,35 @@ export const patchCorrection = asyncHandler(async (req, res) => {
     data: { correction },
     message:
       correction.status === "approved" ? "Correction approved" : "Correction rejected",
+  });
+});
+
+export const getOwnFaceStatus = asyncHandler(async (req, res) => {
+  res.json({ success: true, data: await getFaceStatus(req.user) });
+});
+
+export const postFaceEnroll = asyncHandler(async (req, res) => {
+  const data = await enrollFace(req.user, req.body.descriptor);
+
+  res.status(201).json({
+    success: true,
+    data,
+    message: "Face enrolled",
+  });
+});
+
+export const deleteOwnFace = asyncHandler(async (req, res) => {
+  res.json({
+    success: true,
+    data: await removeFace(req.user),
+    message: "Face enrolment removed",
+  });
+});
+
+export const deleteEmployeeFace = asyncHandler(async (req, res) => {
+  res.json({
+    success: true,
+    data: await removeFace(req.user, req.params.employeeId),
+    message: "Face enrolment removed",
   });
 });

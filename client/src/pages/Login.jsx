@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
+import { Lock, Mail } from "lucide-react";
 import ForgotPasswordModal from "@/components/auth/ForgotPasswordModal";
+import Logo from "@/components/brand/Logo";
 import Button from "@/components/ui/Button";
-import Card from "@/components/ui/Card";
 import FormError from "@/components/ui/FormError";
 import Input from "@/components/ui/Input";
+import PasswordInput from "@/components/ui/PasswordInput";
 import { useSetup } from "@/context/SetupContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
@@ -69,59 +71,71 @@ export default function Login() {
   };
 
   return (
-    <Card className="p-6 sm:p-8">
-      <h1 className="text-xl font-semibold tracking-tight">Sign in</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Use the account your admin created for you.
+    <div>
+      <Logo tone="dark" size="md" className="mb-7 lg:hidden" />
+
+      <h1 className="font-display text-[30px] font-extrabold leading-tight tracking-[-0.02em] text-text">
+        Welcome back
+      </h1>
+      <p className="mt-1.5 text-[15px] text-muted">
+        Sign in to continue to your workspace.
       </p>
 
       {!setupComplete ? (
-        <p className="mt-4 rounded-lg border border-border bg-surface px-3 py-2 text-xs text-muted-foreground">
+        <p className="mt-5 rounded-control bg-status-amber-bg px-3.5 py-2.5 text-xs text-status-amber">
           Company setup is not finished yet. Complete the setup screen first.
         </p>
       ) : null}
 
-      <form className="mt-6 space-y-4" onSubmit={handleSubmit} noValidate>
+      <form className="mt-7 space-y-4" onSubmit={handleSubmit} noValidate>
         <Input
           label="Email"
           type="email"
           autoComplete="email"
+          leadingIcon={Mail}
+          placeholder="you@company.com"
           value={values.email}
           onChange={update("email")}
           error={fieldErrors.email}
+          autoFocus={!values.email}
         />
-        <Input
+
+        <PasswordInput
           label="Password"
-          type="password"
           autoComplete="current-password"
+          leadingIcon={Lock}
+          placeholder="Your password"
           value={values.password}
           onChange={update("password")}
           error={fieldErrors.password}
         />
 
-        <div className="flex justify-end">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="min-h-10 px-0 text-xs text-muted-foreground hover:bg-transparent hover:text-foreground"
+        <div className="-mt-1 flex justify-end">
+          <button
+            type="button"
             onClick={() => setForgotOpen(true)}
+            className="rounded-small font-display text-sm font-semibold text-blue hover:text-blue-700"
           >
-            Forgot password
-          </Button>
+            Forgot password?
+          </button>
         </div>
 
         <FormError bordered>{formError}</FormError>
 
-        <Button type="submit" className="w-full" loading={submitting}>
+        <Button type="submit" size="lg" className="w-full" loading={submitting}>
           Sign in
         </Button>
       </form>
+
+      <p className="mt-6 text-center text-sm text-muted">
+        Need access? Ask your administrator.
+      </p>
 
       <ForgotPasswordModal
         open={forgotOpen}
         onClose={() => setForgotOpen(false)}
         initialEmail={values.email.trim()}
       />
-    </Card>
+    </div>
   );
 }

@@ -2,7 +2,7 @@ import AuditLog from "../models/AuditLog.js";
 
 // Secrets never reach the audit trail, even when a caller passes a whole user
 // or settings document as the before or after value.
-const SENSITIVE_KEY = /pass(word)?|hash|token|secret|otp|credential/i;
+const SENSITIVE_KEY = /pass(word)?|hash|token|secret|otp|credential|faceDescriptor|roomId/i;
 
 const withoutSecrets = (value) => {
   if (value === null || value === undefined) return null;

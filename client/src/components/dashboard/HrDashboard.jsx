@@ -1,10 +1,11 @@
 import { Link } from "react-router-dom";
+import { CalendarDays, Clock, UserCheck, Users } from "lucide-react";
 import CheckInPanel from "@/components/attendance/CheckInPanel";
 import { BarChartBox, LineChartBox } from "@/components/charts/ChartBoxes";
+import StatStrip from "@/components/dashboard/StatStrip";
 import DataTable from "@/components/data/DataTable";
 import Card from "@/components/ui/Card";
 import PageSection from "@/components/ui/PageSection";
-import StatCard from "@/components/ui/StatCard";
 import { formatDate, formatRatio } from "@/lib/format";
 
 const percentTick = (value) => `${Math.round(Number(value) || 0)}%`;
@@ -77,12 +78,38 @@ export default function HrDashboard({ data, loading, error, onRetry }) {
 
   return (
     <div className="space-y-8">
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard label="Headcount" value={loading ? "-" : data?.headcount ?? 0} />
-        <StatCard label="Present today" value={loading ? "-" : data?.presentToday ?? 0} />
-        <StatCard label="On leave today" value={loading ? "-" : data?.onLeaveToday ?? 0} />
-        <StatCard label="Late today" value={loading ? "-" : data?.lateToday ?? 0} />
-      </div>
+      <StatStrip
+        segments={[
+          {
+            label: "Headcount",
+            icon: Users,
+            tone: "blue",
+            value: data?.headcount ?? 0,
+            text: loading ? "-" : undefined,
+          },
+          {
+            label: "Present today",
+            icon: UserCheck,
+            tone: "lime",
+            value: data?.presentToday ?? 0,
+            text: loading ? "-" : undefined,
+          },
+          {
+            label: "On leave today",
+            icon: CalendarDays,
+            tone: "slate",
+            value: data?.onLeaveToday ?? 0,
+            text: loading ? "-" : undefined,
+          },
+          {
+            label: "Late today",
+            icon: Clock,
+            tone: "amber",
+            value: data?.lateToday ?? 0,
+            text: loading ? "-" : undefined,
+          },
+        ]}
+      />
 
       <Card className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
         <div>

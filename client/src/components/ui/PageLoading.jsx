@@ -1,13 +1,18 @@
 import { cn } from "@/lib/cn";
-import Spinner from "./Spinner";
+import Logo from "../brand/Logo";
+import BarsLoader from "../brand/BarsLoader";
 
 export default function PageLoading({ label = "Loading", className }) {
   return (
     <div
       role="status"
-      className={cn("flex items-center justify-center py-16", className)}
+      className={cn(
+        "flex flex-col items-center justify-center gap-4 py-16",
+        className
+      )}
     >
-      <Spinner className="h-5 w-5 text-muted-foreground" />
+      <Logo variant="mark" tone="dark" size="sm" />
+      <BarsLoader size={36} />
       <span className="sr-only">{label}</span>
     </div>
   );

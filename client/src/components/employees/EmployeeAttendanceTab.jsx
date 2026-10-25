@@ -40,6 +40,17 @@ export default function EmployeeAttendanceTab({ attendance, month, onMonthChange
       render: (day) => formatClock(day.record?.checkOut, timeZone),
     },
     {
+      key: "source",
+      header: "Source",
+      className: "whitespace-nowrap",
+      render: (day) =>
+        day.record?.source ? (
+          <StatusBadge kind="source" status={day.record.source} />
+        ) : (
+          <span className="text-muted-foreground">-</span>
+        ),
+    },
+    {
       key: "hours",
       header: "Hours",
       className: "whitespace-nowrap tabular-nums",
